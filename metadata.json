@@ -1,0 +1,6 @@
+{
+  "name": "Couples Truth and Dare",
+  "description": "A real-time, highly interactive premium Truth & Dare game designed for couples with a sleek tech-luxury neon aesthetic, 3D coin flip, and partner screen synchronization.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

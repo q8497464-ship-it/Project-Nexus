@@ -1,0 +1,34 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- User Profiles ---
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // --- User Fall-back Credentials ---
+    match /credentials/{emailKey} {
+      allow read, write: if true;
+    }
+
+    // --- Global Shared Google Drive Sync Document ---
+    match /users/shared_gdrive {
+      allow read, write: if true;
+    }
+
+    // --- Rooms ---
+    match /rooms/{roomId} {
+      allow read, write: if true;
+
+      // --- Messages Subcollection ---
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+    }
+  }
+}
