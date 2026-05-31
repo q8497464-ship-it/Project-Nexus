@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, FormEvent } from "react";
 import { Send, MessageSquare, Mic, Camera, Play, Pause, X, RefreshCw, Square, Video, Image as ImageIcon, Check, Cloud, CloudOff, FolderOpen, AlertCircle, ExternalLink, Settings } from "lucide-react";
 import { Player, ChatMessage } from "../types";
-import { db, isFirebaseSupported } from "../lib/firebase";
-import { collection, addDoc, query, orderBy, onSnapshot, limit, doc, setDoc, getDoc, deleteDoc } from "firebase/firestore";
+import { db, isFirebaseSupported, collection, addDoc, onSnapshot, doc, setDoc, getDoc, deleteDoc } from "../lib/firebase";
+import { query, orderBy, limit } from "firebase/firestore";
 import { getStoredDriveToken, setStoredDriveToken, findOrCreateFolder, uploadFileToDrive, openImplicitGoogleAuth } from "../lib/drive";
 
 function MessageTimer({ createdAt, isAdmin }: { createdAt: string; isAdmin: boolean }) {

@@ -43,13 +43,26 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     
-    <!-- Register Service Worker -->
+    <!-- Clear Old Cache and Service Workers to Prevent Stale Locked Screens -->
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('ServiceWorker registered with scope: ', reg.scope))
-            .catch(err => console.warn('ServiceWorker registration failed: ', err));
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for (var i = 0; i < registrations.length; i++) {
+            registrations[i].unregister().then(function(success) {
+              if (success) console.log('[Service Worker] Successfully unregistered.');
+            });
+          }
+        }).catch(function(err) {
+          console.warn('Error unregistering service workers:', err);
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(function(keys) {
+          keys.forEach(function(key) {
+            caches.delete(key).then(function() {
+              console.log('[Cache] Stale cache cleared:', key);
+            });
+          });
         });
       }
     </script>

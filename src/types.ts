@@ -64,6 +64,25 @@ export interface GameState {
   lastActionTime?: string;
   truthState?: "waiting_for_question" | "waiting_for_answer" | "completed";
   usedCardIds?: string[];
+  ccMasterId?: string;
+  ccSubId?: string;
+  ccState?: string;
+  ccRequestRoleMasterHost?: boolean;
+  ccRequestRoleMasterGuest?: boolean;
+  ccCommandAudioUrl?: string;
+  ccVerificationAudioUrl?: string;
+  ccVerificationVideoUrl?: string;
+  ccVerificationType?: string;
+  ccSubEyesClosed?: boolean;
+  ccSubRoomDark?: boolean;
+  ccTimerTarget?: number;
+  ccActiveSuggestion?: string;
+  ccRound?: number;
+  ccTimerStart?: number;
+  ccScoreHost?: number;
+  ccScoreGuest?: number;
+  ccLoserNudeVideoUrl?: string;
+  ccVerificationDriveUrl?: string;
   createdAt: string;
   updatedAt: string;
 }
