@@ -57,6 +57,7 @@ import LoginAuth from "./components/LoginAuth";
 import RoomConnection, { getPersonalCode } from "./components/RoomConnection";
 import Chatroom from "./components/Chatroom";
 import CommandAndControlGame from "./components/CommandAndControlGame";
+import VirtualTouchGame from "./components/VirtualTouchGame";
 import { getStoredDriveToken, setStoredDriveToken } from "./lib/drive";
 import { soundManager } from "./lib/sound";
 
@@ -1366,63 +1367,41 @@ export default function App() {
                 </div>
               </motion.div>
 
-              {/* Game 3: The Tension Timer (LOCKED) */}
-              <div 
-                className="p-4 rounded-[22px] bg-zinc-950/70 border border-zinc-900/60 opacity-55 flex flex-col gap-3 relative select-none"
-                id="game-launch-tension-timer-locked"
+              {/* Game 3: Virtual Touch (UNLOCKED!) */}
+              <motion.div 
+                whileHover={{ scale: 1.015 }}
+                whileTap={{ scale: 0.985 }}
+                className="p-4 rounded-[22px] bg-linear-to-b from-purple-950/40 via-zinc-950/60 to-purple-950/15 border border-purple-500/35 hover:border-purple-500/55 shadow-[0_4px_30px_rgba(168,85,247,0.15)] transition-all flex flex-col gap-3 cursor-pointer relative overflow-hidden group"
+                onClick={() => {
+                  soundManager.play("chime");
+                  updateRoomState({ selectedGameId: "virtual_touch" });
+                }}
+                id="game-launch-virtual-touch"
               >
+                <div className="absolute -right-6 -bottom-6 w-20 h-20 rounded-full bg-purple-500/15 blur-xl pointer-events-none group-hover:bg-purple-500/25 transition-all" />
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-zinc-900/80 border border-zinc-800/80 flex items-center justify-center text-sm text-zinc-500 shrink-0">
-                      <Sparkles className="w-5 h-5 text-pink-400/60" />
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-purple-500/20 to-indigo-500/10 border border-purple-500/30 flex items-center justify-center text-purple-300 font-bold shadow-inner shrink-0 relative">
+                      <Smartphone className="w-5.5 h-5.5 text-purple-400 animate-pulse" />
                     </div>
                     <div className="text-left">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">The Tension Timer</span>
-                        <span className="text-[7px] font-mono px-1.5 py-0.5 rounded-full bg-pink-500/10 text-pink-400 border border-pink-500/20 uppercase font-bold leading-none">ROLEPLAY</span>
+                        <span className="text-xs font-bold text-zinc-100 tracking-wide uppercase">Virtual Touch</span>
+                        <span className="text-[7px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase font-bold leading-none">ACTIVE</span>
                       </div>
-                      <p className="text-[9.5px] text-zinc-500 font-light mt-0.5">Roleplay Chat</p>
+                      <p className="text-[9.5px] text-zinc-400 font-light mt-0.5">The Neon Body Map</p>
                     </div>
                   </div>
-                  <Lock className="w-3.5 h-3.5 text-zinc-600 shrink-0 mt-1" />
                 </div>
-                <div className="text-[8.5px] text-zinc-500 font-light leading-relaxed">
-                  High-stakes timed roleplay scenarios. Delayed reply penalties and trigger word restrictions.
+                <div className="text-[8.5px] text-zinc-400 font-light leading-relaxed">
+                  Interactive real-time tactile map. Signal exact sensitive zones on shared multi-touch body grids.
                 </div>
-                <div className="text-[8px] font-mono text-zinc-650 tracking-wider text-left border-t border-white/[0.02] pt-1.5">
-                  🔒 Unlocks at Sweetheart Level 3.
+                <div className="text-[8px] font-mono text-purple-350 tracking-wider text-left border-t border-white/[0.02] pt-1.5 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-purple-400 animate-pulse" /> Click to launch and touch sensitive zones!
                 </div>
-              </div>
+              </motion.div>
 
-              {/* Game 4: Virtual Touch (LOCKED) */}
-              <div 
-                className="p-4 rounded-[22px] bg-zinc-950/70 border border-zinc-900/60 opacity-55 flex flex-col gap-3 relative select-none"
-                id="game-launch-virtual-touch-locked"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-zinc-900/80 border border-zinc-800/80 flex items-center justify-center text-sm text-zinc-500 shrink-0">
-                      <Smartphone className="w-5 h-5 text-emerald-400/60" />
-                    </div>
-                    <div className="text-left">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Virtual Touch</span>
-                        <span className="text-[7px] font-mono px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase font-bold leading-none">NEON BODY MAP</span>
-                      </div>
-                      <p className="text-[9.5px] text-zinc-500 font-light mt-0.5">The Neon Body Map</p>
-                    </div>
-                  </div>
-                  <Lock className="w-3.5 h-3.5 text-zinc-600 shrink-0 mt-1" />
-                </div>
-                <div className="text-[8.5px] text-zinc-500 font-light leading-relaxed">
-                  Interactive real-time tactile map. Signal exact focal points on shared multi-touch grid.
-                </div>
-                <div className="text-[8px] font-mono text-zinc-650 tracking-wider text-left border-t border-white/[0.02] pt-1.5">
-                  🔒 Pre-registration required. Loading in next stable update.
-                </div>
-              </div>
-
-              {/* Game 5: Obey The Timer (LOCKED) */}
+              {/* Game 4: Obey The Timer (LOCKED) */}
               <div 
                 className="p-4 rounded-[22px] bg-zinc-950/70 border border-zinc-900/60 opacity-55 flex flex-col gap-3 relative select-none"
                 id="game-launch-obey-timer-locked"
@@ -1450,7 +1429,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Game 6: The Dark Room (LOCKED) */}
+              {/* Game 5: The Dark Room (LOCKED) */}
               <div 
                 className="p-4 rounded-[22px] bg-zinc-950/70 border border-zinc-900/60 opacity-55 flex flex-col gap-3 relative select-none"
                 id="game-launch-dark-room-locked"
@@ -1587,6 +1566,35 @@ export default function App() {
                   </div>
 
                   <CommandAndControlGame
+                    gameState={gameState}
+                    currentUser={viewer}
+                    myPartnerName={myPartnerName}
+                    frameIsMyTurn={frameIsMyTurn}
+                    updateRoomState={updateRoomState}
+                    triggerAlert={triggerAlert}
+                  />
+                </div>
+              ) : gameState.selectedGameId === "virtual_touch" ? (
+                <div className="w-full flex-1 flex flex-col items-center justify-start gap-3" id="vt-overlay-integration-stage">
+                  {/* Top Header with HUB Exit Trigger */}
+                  <div className="w-full flex items-center justify-between gap-2 border-b border-white/[0.02] pb-2" id="vt-exit-indicator-bar-container">
+                    <button 
+                      onClick={() => {
+                        soundManager.play("click");
+                        updateRoomState({ selectedGameId: "" });
+                      }}
+                      className="px-2.5 py-1 text-[8px] font-mono tracking-widest text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-white/[0.04] rounded-lg uppercase flex items-center gap-1 hover:border-white/[0.08] transition-all cursor-pointer shadow-sm select-none"
+                      title="Return to game selector menu"
+                    >
+                      ← HUB
+                    </button>
+                    
+                    <span className="text-[8px] font-mono text-pink-400 tracking-widest uppercase block animate-pulse">
+                      👁️ Neon Touch Sensor Synced
+                    </span>
+                  </div>
+
+                  <VirtualTouchGame
                     gameState={gameState}
                     currentUser={viewer}
                     myPartnerName={myPartnerName}

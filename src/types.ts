@@ -84,6 +84,11 @@ export interface GameState {
   ccScoreGuest?: number;
   ccLoserNudeVideoUrl?: string;
   ccVerificationDriveUrl?: string;
+  vtToucherId?: string;
+  vtReceiverId?: string;
+  vtCurrentTouch?: string;
+  vtVerificationVideoUrl?: string;
+  vtState?: "waiting_for_touch" | "waiting_for_response" | "waiting_for_approval";
   createdAt: string;
   updatedAt: string;
 }
