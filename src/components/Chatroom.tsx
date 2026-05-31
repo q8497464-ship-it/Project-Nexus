@@ -18,6 +18,18 @@ const EROTIC_TASKS = [
   "Kiss the camera lens sensually, moving your tongue on it like you're teasing Master."
 ];
 
+const BODY_ZONES = [
+  { id: "lips", name: "Lips 👄", descFemale: "Record a video biting your lips sensually, blowing slow kisses, or licking your lips slowly.", descMale: "Record a video biting your lips sensually, blowing slow kisses, or licking your lips slowly." },
+  { id: "neck", name: "Neck 🫦", descFemale: "Close your eyes, throw your head back, and sensually stroke or massage your neck on camera.", descMale: "Close your eyes, throw your head back, and sensually stroke or massage your neck on camera." },
+  { id: "collarbone", name: "Collarbone ✨", descFemale: "Pull down your collar layer, run your fingers along your collarbone, and smile naughtily.", descMale: "Pull down your collar layer, run your fingers along your collarbone, and smile naughtily." },
+  { id: "chest", name: "Upper Chest 🌟", descFemale: "Sensually slide your hands down your upper torso, showing off your collarbone and high neck area.", descMale: "Flexing your chest muscles and running your hands down your pecs while keeping solid camera eye-contact." },
+  { id: "mid_chest", name: "Mid Chest 🔥", descFemale: "Seductively run your fingers down your middle chest area, showing your heart rate reactions on camera.", descMale: "Run your hands down your abs and core, pulling your shirt up slightly to tease your toned midriff." },
+  { id: "nipples", name: "Nipples 🍒", descFemale: "A highly teasing video grazing, pressing, or circling your nipples softly with your fingertips.", descMale: "Slowly running your fingertips over your chest and pinching or teasing your nipples with a smirk." },
+  { id: "waist", name: "Waist 🌶️", descFemale: "Slowly move your hands down your side hips, framing your waist, and twist slightly on camera.", descMale: "Trace your obliques, showing off your strong V-cut hip lines and resting your hands on your waistband." },
+  { id: "vagina", name: "Vagina 💜", descFemale: "An intimate, teasing video of the pelvic/vagina region, showing slow sensual movements or touch over fabrics.", descMale: "Teasing video of your muscular groin, framing your hips or slowly stroking your pelvic region on camera." },
+  { id: "thighs", name: "Thighs 😈", descFemale: "Show your thighs, run your fingernails softly up your legs, and bite your lower lip.", descMale: "Show your thighs, run your fingernails softly up your legs, and bite your lower lip." }
+];
+
 function createLowBitrateRecorder(stream: MediaStream): MediaRecorder {
   const optionsTypes = [
     { mimeType: "video/webm;codecs=vp8", videoBitsPerSecond: 80000 },
@@ -116,6 +128,8 @@ interface ChatroomProps {
   updateRoomState?: (updates: any) => Promise<void>;
   onCommandApprove?: () => void;
   onCommandReject?: () => void;
+  onVirtualTouchApprove?: () => void;
+  onVirtualTouchReject?: () => void;
 }
 
 export default function Chatroom({
@@ -128,7 +142,9 @@ export default function Chatroom({
   gameState,
   updateRoomState,
   onCommandApprove,
-  onCommandReject
+  onCommandReject,
+  onVirtualTouchApprove,
+  onVirtualTouchReject
 }: ChatroomProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputVal, setInputVal] = useState("");
@@ -1057,6 +1073,113 @@ export default function Chatroom({
         </div>
       )}
 
+      {/* VIRTUAL TOUCH ACTIVE TASK DISPLAY PANEL */}
+      {gameState?.selectedGameId === "virtual_touch" && (
+        <div className="bg-gradient-to-r from-purple-950/45 via-pink-950/25 to-black/60 border-b border-purple-500/25 p-2.5 px-4 text-left flex items-center justify-between gap-3 shrink-0 animate-fade-in z-20" id="chat-vt-task-banner">
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/30 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(168,85,247,0.2)] mt-0.5 animate-pulse">
+              <span className="text-purple-400 font-bold text-xs block">✨</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="text-[7.5px] font-mono text-purple-400 font-black tracking-widest uppercase block leading-none">
+                {gameState.vtState === "waiting_for_approval" ? "🔍 EVALUATING SENSITIVE TOUCH" : "🔥 TACTILE COMPLIANCE TARGET"}
+              </span>
+              
+              {gameState.vtState === "waiting_for_touch" ? (
+                <p className="text-[10.5px] text-zinc-300 mt-1 font-medium font-sans">
+                  {currentUser.id === gameState.vtToucherId 
+                    ? "👉 Choose a sensitive focal zone by tapping on your partner's body silhouette map above." 
+                    : "⏳ Standby. Partner is currently exploring the tactile body grid to touch a sensitive zone."}
+                </p>
+              ) : (
+                <div className="mt-1">
+                  <span className="text-[11px] text-zinc-100 font-bold block leading-tight">
+                    Target: {
+                      (() => {
+                        const zone = BODY_ZONES.find(z => z.id === gameState.vtCurrentTouch);
+                        if (!zone) return gameState.vtCurrentTouch || "None";
+                        const isFemale = (currentUser.id === gameState.vtReceiverId ? currentUser.gender : (currentUser.gender === "male" ? "female" : "male")) === "female";
+                        if (zone.id === "vagina") return isFemale ? "Vagina 💜" : "Groin & Shaft 🍆";
+                        if (zone.id === "nipples") return isFemale ? "Nipples 🍒" : "Masculine Nipples 🔥";
+                        if (zone.id === "chest") return isFemale ? "Upper Chest 🌟" : "Muscular Pecs 💪";
+                        if (zone.id === "mid_chest") return isFemale ? "Mid Chest 🔥" : "Abs / Toned Core ⚡";
+                        return zone.name;
+                      })()
+                    }
+                  </span>
+                  <p className="text-[9.5px] text-zinc-355 font-light leading-snug mt-0.5">
+                    {
+                      (() => {
+                        const zone = BODY_ZONES.find(z => z.id === gameState.vtCurrentTouch);
+                        if (!zone) return "";
+                        const isFemale = (currentUser.id === gameState.vtReceiverId ? currentUser.gender : (currentUser.gender === "male" ? "female" : "male")) === "female";
+                        return isFemale ? zone.descFemale : zone.descMale;
+                      })()
+                    }
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="shrink-0 flex items-center gap-2">
+            {gameState.vtState === "waiting_for_touch" ? (
+              <span className="text-[8px] font-mono bg-zinc-900 border border-white/5 text-zinc-400 px-2.5 py-1 rounded animate-pulse uppercase font-extrabold">
+                {currentUser.id === gameState.vtToucherId ? "Your turn to touch 🎨" : "Standby ⏱️"}
+              </span>
+            ) : gameState.vtState === "waiting_for_response" ? (
+              currentUser.id === gameState.vtReceiverId ? (
+                <div className="flex flex-col gap-1 items-end">
+                  <span className="text-[7.5px] font-mono font-bold text-white bg-pink-600 border border-pink-400 px-2 py-0.5 rounded leading-none uppercase animate-bounce">
+                    Comply below 🎥
+                  </span>
+                  <button
+                    type="button"
+                    onClick={openInAppCamera}
+                    className="text-[8.4px] font-mono text-pink-300 hover:text-white underline cursor-pointer flex items-center gap-1 leading-none font-bold"
+                  >
+                    <Video className="w-2.5 h-2.5 text-pink-400 animate-pulse" /> Launch Lens
+                  </button>
+                </div>
+              ) : (
+                <span className="text-[7.5px] font-mono text-zinc-400 italic bg-white/5 border border-white/5 px-2 py-0.5 rounded uppercase">
+                  ⏱️ Partner Complying...
+                </span>
+              )
+            ) : gameState.vtState === "waiting_for_approval" ? (
+              currentUser.id === gameState.vtToucherId ? (
+                <div className="flex items-center gap-1.5" id="chat-vt-fast-actions-header">
+                  {onVirtualTouchReject && (
+                    <button
+                      type="button"
+                      onClick={onVirtualTouchReject}
+                      className="px-2 py-1 bg-rose-600/25 hover:bg-rose-600 border border-rose-500/35 text-rose-200 hover:text-white rounded-md text-[8px] font-mono font-black uppercase transition-all shadow-md cursor-pointer select-none"
+                      title="Reject and request retake"
+                    >
+                      REJECT ✗
+                    </button>
+                  )}
+                  {onVirtualTouchApprove && (
+                    <button
+                      type="button"
+                      onClick={onVirtualTouchApprove}
+                      className="px-2 py-1 bg-gradient-to-r from-emerald-600 to-teal-500 text-white border border-emerald-400/40 rounded-md text-[8px] font-mono font-black uppercase transition-all shadow-md cursor-pointer select-none font-bold"
+                      title="Approve and award point"
+                    >
+                      APPROVE ✓
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <span className="text-[8px] font-mono text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded animate-pulse">
+                  ● VERIFYING...
+                </span>
+              )
+            ) : null}
+          </div>
+        </div>
+      )}
+
       {/* Hidden Audio Element for Player */}
       <audio ref={audioPlayerRef} src={audioPlaybackUrl || undefined} className="hidden" />
 
@@ -1202,9 +1325,11 @@ export default function Chatroom({
                       <Check className="w-3.5 h-3.5 text-emerald-400 animate-bounce" /> AUDIT COMPLIANCE VIDEO
                     </span>
 
-                    <div className="w-full max-w-xs mx-auto p-1.5 rounded-xl border border-white/[0.04] bg-[#020202] shadow">
-                      <video src={gameState.ccVerificationVideoUrl} controls autoPlay loop playsInline className="w-full aspect-video rounded-lg object-cover" />
-                    </div>
+                    {gameState.ccVerificationVideoUrl && (
+                      <div className="w-full max-w-xs mx-auto p-1.5 rounded-xl border border-white/[0.04] bg-[#020202] shadow">
+                        <video src={gameState.ccVerificationVideoUrl} controls autoPlay loop playsInline className="w-full aspect-video rounded-lg object-cover" />
+                      </div>
+                    )}
 
                     <p className="text-[9px] text-zinc-400 leading-normal px-2">
                       Active: <em className="text-zinc-200">"{ccActiveSuggestion}"</em>. Check the proof details above carefully, and approve/reject the scorecard:

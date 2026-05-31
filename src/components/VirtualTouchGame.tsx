@@ -24,6 +24,7 @@ import {
 import { GameState, Player } from "../types";
 import { db, isFirebaseSupported, doc, setDoc } from "../lib/firebase";
 import { getStoredDriveToken, findOrCreateFolder, uploadFileToDrive } from "../lib/drive";
+import { soundManager } from "../lib/sound";
 
 interface VirtualTouchProps {
   gameState: GameState;
@@ -55,15 +56,33 @@ const BODY_ZONES = [
   },
   { 
     id: "chest", 
-    name: "Chest & Abs 🔥", 
-    description: "Sensually slide your hands down your chest/torso or tease under your shirt.",
+    name: "Upper Chest 🌟", 
+    description: "Sensually slide your hands down your upper torso, showing off your collarbone and high neck area.",
     glowColor: "rgba(244,63,94,0.8)" 
   },
   { 
+    id: "mid_chest", 
+    name: "Mid Chest 🔥", 
+    description: "Seductively run your fingers down your middle chest area, showing your heart rate reactions on camera.",
+    glowColor: "rgba(244,63,94,0.8)" 
+  },
+  { 
+    id: "nipples", 
+    name: "Nipples 🍒", 
+    description: "A highly teasing video grazing, pressing, or circling your nipples softly with your fingertips.",
+    glowColor: "rgba(236,72,153,0.9)" 
+  },
+  { 
     id: "waist", 
-    name: "Waist & Hips 🌶️", 
-    description: "Slowly move your hands down your hips, framing your waist, and twist slightly on camera.",
+    name: "Waist 🌶️", 
+    description: "Slowly move your hands down your side hips, framing your waist, and twist slightly on camera.",
     glowColor: "rgba(239,68,68,0.8)" 
+  },
+  { 
+    id: "vagina", 
+    name: "Vagina 💜", 
+    description: "An intimate, teasing video of the pelvic/vagina region, showing slow sensual movements or touch over fabrics.",
+    glowColor: "rgba(168,85,247,0.9)" 
   },
   { 
     id: "thighs", 
@@ -179,9 +198,7 @@ export default function VirtualTouchGame({
     try {
       // Play chime/sound
       try {
-        const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2568/2568-84.wav");
-        audio.volume = 0.25;
-        audio.play();
+        soundManager.play("chime");
       } catch (e) {}
 
       await updateRoomState({
@@ -308,7 +325,7 @@ export default function VirtualTouchGame({
       await updateRoomState({
         vtVerificationVideoUrl: finalVideoUrl,
         vtState: "waiting_for_approval",
-        ccVerificationDriveUrl: driveUrl || undefined
+        ccVerificationDriveUrl: driveUrl || ""
       });
 
       stopCamera();
@@ -350,7 +367,63 @@ export default function VirtualTouchGame({
     }
   };
 
-  const activeZone = BODY_ZONES.find(z => z.id === vtCurrentTouch);
+  const partnerGenderInitial = currentUser?.gender === "male" ? "female" : "male";
+  const [modelGender, setModelGender] = useState<"female" | "male">(partnerGenderInitial);
+
+  useEffect(() => {
+    if (currentUser?.gender) {
+      setModelGender(currentUser.gender === "male" ? "female" : "male");
+    }
+  }, [currentUser?.gender]);
+
+  const getZoneName = (zoneId: string, gender: "female" | "male") => {
+    if (zoneId === "vagina") return gender === "female" ? "Vagina 💜" : "Groin & Shaft 🍆";
+    if (zoneId === "nipples") return gender === "female" ? "Nipples 🍒" : "Masculine Nipples 🔥";
+    if (zoneId === "chest") return gender === "female" ? "Upper Chest 🌟" : "Muscular Pecs 💪";
+    if (zoneId === "mid_chest") return gender === "female" ? "Mid Chest 🔥" : "Abs / Toned Core ⚡";
+    
+    const zone = BODY_ZONES.find(z => z.id === zoneId);
+    return zone ? zone.name : zoneId;
+  };
+
+  const getZoneDesc = (zoneId: string, gender: "female" | "male") => {
+    if (zoneId === "vagina") {
+      return gender === "female"
+        ? "An intimate, teasing video of the pelvic/vagina region, showing slow movements over soft fabrics."
+        : "Teasing video of your muscular groin, framing your hips or slowly stroking your pelvic region on camera.";
+    }
+    if (zoneId === "nipples") {
+      return gender === "female"
+        ? "A highly teasing video grazing, pressing, or circling your nipples softly with your fingertips."
+        : "Slowly running your fingertips over your chest and pinching or teasing your nipples with a smirk.";
+    }
+    if (zoneId === "chest") {
+      return gender === "female"
+        ? "Sensually sliding your hands down your upper torso, showing off your collarbone and high neck area."
+        : "Flexing your chest muscles and running your hands down your pecs while keeping solid camera eye-contact.";
+    }
+    if (zoneId === "mid_chest") {
+      return gender === "female"
+        ? "Seductively run your fingers down your middle chest area, showing your heart rate reactions on camera."
+        : "Run your hands down your abs and core, pulling your shirt up slightly to tease your toned midriff.";
+    }
+    if (zoneId === "waist") {
+      return gender === "female"
+        ? "Slowly move your hands down your side hips, framing your waist, and twist slightly on camera."
+        : "Trace your obliques, showing off your strong V-cut hip lines and resting your hands on your waistband.";
+    }
+    
+    const zone = BODY_ZONES.find(z => z.id === zoneId);
+    return zone ? zone.description : "";
+  };
+
+  const activeZoneRaw = BODY_ZONES.find(z => z.id === vtCurrentTouch);
+
+  const activeZone = activeZoneRaw ? {
+    ...activeZoneRaw,
+    name: getZoneName(activeZoneRaw.id, modelGender),
+    description: getZoneDesc(activeZoneRaw.id, modelGender)
+  } : undefined;
 
   return (
     <div 
@@ -374,21 +447,55 @@ export default function VirtualTouchGame({
         </div>
       </div>
 
-      {/* Main Game Stage */}
-      <div className="w-full flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 items-center justify-center p-1">
+      {/* Main Game Stage - Centered on Silhouette mapping as requested */}
+      <div className="w-full flex-1 flex flex-col items-center justify-center p-1">
         
-        {/* Left Side: Silhouette Body Mapper */}
-        <div className="flex flex-col items-center justify-center bg-black/90 rounded-2xl border border-zinc-900 p-4 relative min-h-[360px] shadow-inner">
+        {/* Center: Silhouette Body Mapper */}
+        <div className="w-full max-w-[420px] flex flex-col items-center justify-center bg-black/90 rounded-2xl border border-zinc-900 p-5 relative min-h-[400px] shadow-inner">
           
           {/* Subtle Ambient Background Neon Grid */}
           <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:16px_16px] pointer-events-none rounded-2xl" />
           
-          <h4 className="text-[10px] font-mono text-zinc-500 tracking-[0.2em] uppercase mb-4 pointer-events-none relative z-10">
-            Interactive Neon Silhouette
-          </h4>
+          <div className="w-full flex flex-col items-center gap-2 mb-4 relative z-10 select-none">
+            <h4 className="text-[10px] font-mono text-zinc-400 tracking-[0.2em] uppercase pointer-events-none">
+              Interactive Body Silhouette
+            </h4>
+            
+            {/* Gender Toggle Tab Bar */}
+            <div className="flex items-center bg-zinc-950 border border-white/5 rounded-xl p-0.5 mt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  soundManager.play("click");
+                  setModelGender("female");
+                }}
+                className={`px-3 py-1 text-[9px] font-mono tracking-wider rounded-lg transition-all cursor-pointer font-bold flex items-center gap-1 ${
+                  modelGender === "female"
+                    ? "bg-purple-600 text-white shadow-lg"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                🚺 FEMALE MAP
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  soundManager.play("click");
+                  setModelGender("male");
+                }}
+                className={`px-3 py-1 text-[9px] font-mono tracking-wider rounded-lg transition-all cursor-pointer font-bold flex items-center gap-1 ${
+                  modelGender === "male"
+                    ? "bg-purple-600 text-white shadow-lg"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                🚹 MALE MAP
+              </button>
+            </div>
+          </div>
 
           {/* Seductive SVG Canvas Mannequin Body */}
-          <div className="w-[180px] h-[320px] relative z-10" id="vt-mannequin-container">
+          <div className="w-[185px] h-[330px] relative z-10" id="vt-mannequin-container">
             <svg 
               viewBox="0 0 200 400" 
               className="w-full h-full filter drop-shadow-[0_0_8px_rgba(168,85,247,0.35)]"
@@ -422,107 +529,338 @@ export default function VirtualTouchGame({
               <line x1="50" y1="200" x2="150" y2="200" className="stroke-white/[0.03] stroke-1 stroke-dasharray-[2,4]" />
               <line x1="100" y1="50" x2="100" y2="350" className="stroke-white/[0.03] stroke-1 stroke-dasharray-[2,4]" />
 
-              {/* Ambient Mannequin Wireframe Body Outline (Static Subtle Purple Glow) */}
-              <g className="opacity-90 transition-all duration-300">
-                {/* Outlines of head, body, arms, legs */}
-                {/* Head */}
-                <path d="M 85 45 C 85 30, 115 30, 115 45 C 115 60, 85 60, 85 45 Z" className="stroke-purple-700/45 fill-transparent stroke-1.5" />
-                {/* Arms */}
-                <path d="M 68 112 C 55 130, 42 165, 40 195" className="stroke-purple-700/35 fill-transparent stroke-1.5" />
-                <path d="M 132 112 C 145 130, 158 165, 160 195" className="stroke-purple-700/35 fill-transparent stroke-1.5" />
-                {/* Inner Body contour */}
-                <path d="M 72 112 C 50 112, 60 180, 70 195 C 65 240, 75 260, 75 290" className="stroke-purple-700/35 fill-transparent stroke-1.5" />
-                <path d="M 128 112 C 150 112, 140 180, 130 195 C 135 240, 125 260, 125 290" className="stroke-purple-700/35 fill-transparent stroke-1.5" />
-                {/* Left Leg */}
-                <path d="M 75 290 C 70 320, 75 365, 78 385" className="stroke-purple-700/35 fill-transparent stroke-1.5" />
-                {/* Right Leg */}
-                <path d="M 125 290 C 130 320, 125 365, 122 385" className="stroke-purple-700/35 fill-transparent stroke-1.5" />
-              </g>
+              {modelGender === "female" ? (
+                <>
+                  {/* FEMALE MODEL WIREFRAME (ELEGANT HOURGLASS) */}
+                  <g className="opacity-95 transition-all duration-300 pointer-events-none">
+                    {/* Head contour */}
+                    <path d="M 85 45 C 85 28, 115 28, 115 45 C 115 58, 85 58, 85 45 Z" className="stroke-purple-500/20 fill-purple-950/5 stroke-1" />
+                    <path d="M 85 40 Q 82 45 85 48" className="stroke-purple-700/30 fill-transparent stroke-1" />
+                    <path d="M 115 40 Q 118 45 115 48" className="stroke-purple-700/30 fill-transparent stroke-1" />
+                    
+                    {/* Neck & Shoulders */}
+                    <path d="M 92 58 L 90 85 L 68 96 L 55 115" className="stroke-purple-700/35 fill-transparent stroke-1.2" />
+                    <path d="M 108 58 L 110 85 L 132 96 L 145 115" className="stroke-purple-700/35 fill-transparent stroke-1.2" />
+                    
+                    {/* Arms */}
+                    <path d="M 55 115 C 44 135, 34 165, 31 195 C 29 215, 32 230, 36 240" className="stroke-purple-700/25 fill-transparent stroke-1" />
+                    <path d="M 145 115 C 156 135, 166 165, 169 195 C 171 215, 168 230, 164 240" className="stroke-purple-700/25 fill-transparent stroke-1" />
+                    
+                    {/* Side body profile boundaries */}
+                    <path d="M 72 115 Q 65 140 76 170 Q 64 210 75 242 M 128 115 Q 135 140 124 170 Q 136 210 125 242" className="stroke-purple-750/35 fill-transparent stroke-1.2" strokeDasharray="3,3" />
+                    
+                    {/* Hip & Leg contours */}
+                    <path d="M 75 242 Q 72 265 75 295 L 78 385 M 125 242 Q 128 265 125 295 L 122 385" className="stroke-purple-700/25 fill-transparent stroke-1.2" />
+                    <path d="M 98 242 L 98 385" className="stroke-purple-800/20 fill-transparent stroke-1" strokeDasharray="1,4" />
+                  </g>
 
-              {/* INTERACTIVE BODY ZONES FOR THE GAME */}
-              {/* LIPS */}
-              <path 
-                onClick={() => handleZoneTouch("lips")}
-                d="M 90 53 Q 100 63 110 53 Q 100 58 90 53 Z" 
-                className={`cursor-pointer transition-all duration-300 ${
-                  vtCurrentTouch === "lips" 
-                    ? "stroke-pink-500 fill-pink-500/65" 
-                    : "stroke-pink-500/30 fill-transparent hover:stroke-pink-400 hover:fill-pink-500/10"
-                }`}
-                strokeWidth={vtCurrentTouch === "lips" ? "3" : "1.5"}
-                filter={vtCurrentTouch === "lips" ? "url(#neon-hot)" : "url(#neon-ambient)"}
-                id="silhouette-lips"
-              />
+                  {/* INTERACTIVE BODY ZONES */}
+                  {/* LIPS */}
+                  <path 
+                    onClick={() => handleZoneTouch("lips")}
+                    d="M 90 51 C 93 47, 97 47, 100 51 C 103 47, 107 47, 110 51 C 111 53, 108 57, 100 57 C 92 57, 89 53, 90 51 Z" 
+                    className={`cursor-pointer transition-all duration-300 ${
+                      vtCurrentTouch === "lips" 
+                        ? "stroke-pink-500 fill-pink-500/65" 
+                        : "stroke-pink-500/30 fill-transparent hover:stroke-pink-400 hover:fill-pink-500/10"
+                    }`}
+                    strokeWidth={vtCurrentTouch === "lips" ? "3" : "1.5"}
+                    filter={vtCurrentTouch === "lips" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="female-lips"
+                  />
 
-              {/* NECK */}
-              <path 
-                onClick={() => handleZoneTouch("neck")}
-                d="M 93 63 L 107 63 L 105 85 L 95 85 Z" 
-                className={`cursor-pointer transition-all duration-300 ${
-                  vtCurrentTouch === "neck" 
-                    ? "stroke-pink-500 fill-pink-500/65" 
-                    : "stroke-pink-500/25 fill-transparent hover:stroke-pink-350 hover:fill-pink-500/15"
-                }`}
-                strokeWidth={vtCurrentTouch === "neck" ? "3.5" : "1.5"}
-                filter={vtCurrentTouch === "neck" ? "url(#neon-hot)" : "url(#neon-ambient)"}
-                id="silhouette-neck"
-              />
+                  {/* NECK */}
+                  <path 
+                    onClick={() => handleZoneTouch("neck")}
+                    d="M 92 58 L 108 58 Q 106 73 104 81 Q 100 82 96 81 Q 94 73 92 58 Z" 
+                    className={`cursor-pointer transition-all duration-300 ${
+                      vtCurrentTouch === "neck" 
+                        ? "stroke-pink-500 fill-pink-500/65" 
+                        : "stroke-pink-500/25 fill-transparent hover:stroke-pink-350 hover:fill-pink-500/15"
+                    }`}
+                    strokeWidth={vtCurrentTouch === "neck" ? "3.5" : "1.5"}
+                    filter={vtCurrentTouch === "neck" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="female-neck"
+                  />
 
-              {/* COLLARBONE */}
-              <path 
-                onClick={() => handleZoneTouch("collarbone")}
-                d="M 68 88 Q 100 98 132 88 L 134 100 Q 100 110 66 100 Z" 
-                className={`cursor-pointer transition-all duration-300 ${
-                  vtCurrentTouch === "collarbone" 
-                    ? "stroke-purple-500 fill-purple-550/65" 
-                    : "stroke-purple-500/25 fill-transparent hover:stroke-purple-400 hover:fill-purple-500/15"
-                }`}
-                strokeWidth={vtCurrentTouch === "collarbone" ? "3" : "1.5"}
-                filter={vtCurrentTouch === "collarbone" ? "url(#neon-hot)" : "url(#neon-ambient)"}
-                id="silhouette-collarbone"
-              />
+                  {/* COLLARBONE */}
+                  <path 
+                    onClick={() => handleZoneTouch("collarbone")}
+                    d="M 72 84 Q 100 93 128 84 L 131 95 Q 100 104 69 95 Z" 
+                    className={`cursor-pointer transition-all duration-300 ${
+                      vtCurrentTouch === "collarbone" 
+                        ? "stroke-purple-500 fill-purple-550/65" 
+                        : "stroke-purple-500/25 fill-transparent hover:stroke-purple-400 hover:fill-purple-500/15"
+                    }`}
+                    strokeWidth={vtCurrentTouch === "collarbone" ? "3" : "1.5"}
+                    filter={vtCurrentTouch === "collarbone" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="female-collarbone"
+                  />
 
-              {/* CHEST */}
-              <path 
-                onClick={() => handleZoneTouch("chest")}
-                d="M 70 102 C 60 135, 90 155, 100 155 C 110 155, 140 135, 130 102 Z" 
-                className={`cursor-pointer transition-all duration-300 ${
-                  vtCurrentTouch === "chest" 
-                    ? "stroke-rose-500 fill-rose-500/70" 
-                    : "stroke-rose-500/25 fill-transparent hover:stroke-rose-350 hover:fill-rose-500/15"
-                }`}
-                strokeWidth={vtCurrentTouch === "chest" ? "3" : "1.5"}
-                filter={vtCurrentTouch === "chest" ? "url(#neon-hot)" : "url(#neon-ambient)"}
-                id="silhouette-chest"
-              />
+                  {/* UPPER CHEST */}
+                  <path 
+                    onClick={() => handleZoneTouch("chest")}
+                    d="M 70 97 Q 100 106 130 97 L 132 116 Q 100 125 68 116 Z" 
+                    className={`cursor-pointer transition-all duration-300 ${
+                      vtCurrentTouch === "chest" 
+                        ? "stroke-rose-500 fill-rose-500/70" 
+                        : "stroke-rose-500/25 fill-transparent hover:stroke-rose-350 hover:fill-rose-500/15"
+                    }`}
+                    strokeWidth={vtCurrentTouch === "chest" ? "3" : "1.5"}
+                    filter={vtCurrentTouch === "chest" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="female-chest"
+                  />
 
-              {/* WAIST & ABS */}
-              <path 
-                onClick={() => handleZoneTouch("waist")}
-                d="M 75 157 C 68 190, 85 220, 100 220 C 115 220, 132 190, 125 157 Z" 
-                className={`cursor-pointer transition-all duration-300 ${
-                  vtCurrentTouch === "waist" 
-                    ? "stroke-red-500 fill-red-500/65" 
-                    : "stroke-red-500/25 fill-transparent hover:stroke-red-350 hover:fill-red-500/15"
-                }`}
-                strokeWidth={vtCurrentTouch === "waist" ? "3" : "1.5"}
-                filter={vtCurrentTouch === "waist" ? "url(#neon-hot)" : "url(#neon-ambient)"}
-                id="silhouette-waist"
-              />
+                  {/* MID CHEST */}
+                  <path 
+                    onClick={() => handleZoneTouch("mid_chest")}
+                    d="M 68 118 Q 100 127 132 118 L 133 134 Q 100 143 67 134 Z" 
+                    className={`cursor-pointer transition-all duration-300 ${
+                      vtCurrentTouch === "mid_chest" 
+                        ? "stroke-rose-500 fill-rose-500/60" 
+                        : "stroke-rose-500/20 fill-transparent hover:stroke-rose-300 hover:fill-rose-500/10"
+                    }`}
+                    strokeWidth={vtCurrentTouch === "mid_chest" ? "2.5" : "1.2"}
+                    filter={vtCurrentTouch === "mid_chest" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="female-mid-chest"
+                  />
 
-              {/* THIGHS */}
-              <path 
-                onClick={() => handleZoneTouch("thighs")}
-                d="M 78 222 C 55 255, 85 345, 96 345 C 100 345, 104 345, 122 222 Z" 
-                className={`cursor-pointer transition-all duration-300 ${
-                  vtCurrentTouch === "thighs" 
-                    ? "stroke-purple-600 fill-purple-600/70" 
-                    : "stroke-purple-600/20 fill-transparent hover:stroke-purple-400 hover:fill-purple-600/15"
-                }`}
-                strokeWidth={vtCurrentTouch === "thighs" ? "3" : "1.5"}
-                filter={vtCurrentTouch === "thighs" ? "url(#neon-hot)" : "url(#neon-ambient)"}
-                id="silhouette-thighs"
-              />
+                  {/* NIPPLES (Left & Right Pulsing Breasts) */}
+                  <g 
+                    onClick={() => handleZoneTouch("nipples")}
+                    className={`cursor-pointer transition-all duration-300 ${
+                      vtCurrentTouch === "nipples" 
+                        ? "stroke-pink-500 fill-pink-500/60" 
+                        : "stroke-pink-500/25 fill-transparent hover:stroke-pink-400 hover:fill-pink-500/10"
+                    }`}
+                    filter={vtCurrentTouch === "nipples" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="female-nipples"
+                  >
+                    <path d="M 67 136 C 65 152, 85 155, 95 142 M 133 136 C 135 152, 115 155, 105 142" strokeWidth="1" strokeDasharray="2,2" />
+                    <circle cx="81" cy="142" r="9" strokeWidth={vtCurrentTouch === "nipples" ? "2.5" : "1.2"} />
+                    <circle cx="81" cy="142" r="2.5" fill="#ec4899" className={vtCurrentTouch === "nipples" ? "animate-ping" : ""} />
+                    <circle cx="119" cy="142" r="9" strokeWidth={vtCurrentTouch === "nipples" ? "2.5" : "1.2"} />
+                    <circle cx="119" cy="142" r="2.5" fill="#ec4899" className={vtCurrentTouch === "nipples" ? "animate-ping" : ""} />
+                  </g>
+
+                  {/* WAIST */}
+                  <path 
+                    onClick={() => handleZoneTouch("waist")}
+                    d="M 72 150 C 65 174, 85 194, 100 194 C 115 194, 135 174, 128 150 C 131 166, 125 191, 100 191 C 75 191, 69 166, 72 150 Z" 
+                    className={`cursor-pointer transition-all duration-300 ${
+                      vtCurrentTouch === "waist" 
+                        ? "stroke-red-500 fill-red-500/65" 
+                        : "stroke-red-500/25 fill-transparent hover:stroke-red-350 hover:fill-red-500/15"
+                    }`}
+                    strokeWidth={vtCurrentTouch === "waist" ? "3" : "1.5"}
+                    filter={vtCurrentTouch === "waist" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="female-waist"
+                  />
+
+                  {/* VAGINA */}
+                  <g
+                    onClick={() => handleZoneTouch("vagina")}
+                    className={`cursor-pointer transition-all duration-300 ${
+                      vtCurrentTouch === "vagina" 
+                        ? "stroke-purple-500 fill-purple-550/65" 
+                        : "stroke-purple-500/25 fill-transparent hover:stroke-purple-400 hover:fill-purple-500/15"
+                    }`}
+                    filter={vtCurrentTouch === "vagina" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="female-vagina"
+                  >
+                    <path 
+                      d="M 76 197 Q 100 201 124 197 C 120 223, 110 240, 100 240 C 90 240, 80 223, 76 197 Z"
+                      strokeWidth={vtCurrentTouch === "vagina" ? "2.5" : "1.2"}
+                    />
+                    <line x1="100" y1="208" x2="100" y2="228" strokeWidth="2.5" stroke="#c084fc" className={vtCurrentTouch === "vagina" ? "animate-pulse" : "opacity-30"} />
+                  </g>
+
+                  {/* THIGHS */}
+                  <g
+                    onClick={() => handleZoneTouch("thighs")}
+                    className={`cursor-pointer transition-all duration-300 ${
+                      vtCurrentTouch === "thighs" 
+                        ? "stroke-purple-600 fill-purple-600/70" 
+                        : "stroke-purple-600/20 fill-transparent hover:stroke-purple-400 hover:fill-purple-600/15"
+                    }`}
+                    filter={vtCurrentTouch === "thighs" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="female-thighs"
+                  >
+                    <path d="M 75 242 C 58 265, 75 320, 78 335 L 97 335 C 97 320, 95 265, 96 242 Z" strokeWidth={vtCurrentTouch === "thighs" ? "2.5" : "1.2"} />
+                    <path d="M 125 242 C 142 265, 125 320, 122 335 L 103 335 C 103 320, 105 265, 104 242 Z" strokeWidth={vtCurrentTouch === "thighs" ? "2.5" : "1.2"} />
+                  </g>
+                </>
+              ) : (
+                <>
+                  {/* MALE MODEL WIREFRAME (BROAD ATHLETIC V-TAPER) */}
+                  <g className="opacity-95 transition-all duration-300 pointer-events-none">
+                    {/* Head contour */}
+                    <path d="M 84 45 C 84 27, 116 27, 116 45 C 116 59, 84 59, 84 45 Z" className="stroke-indigo-500/20 fill-indigo-950/5 stroke-1" />
+                    <path d="M 84 39 Q 80 44 84 47" className="stroke-indigo-700/30 fill-transparent stroke-1" />
+                    <path d="M 116 39 Q 120 44 116 47" className="stroke-indigo-700/30 fill-transparent stroke-1" />
+                    
+                    {/* Neck & Shoulders (Muscular neck and broad width) */}
+                    <path d="M 90 58 L 86 85 L 58 96 L 46 115" className="stroke-indigo-700/35 fill-transparent stroke-1.2" />
+                    <path d="M 110 58 L 114 85 L 142 96 L 154 115" className="stroke-indigo-700/35 fill-transparent stroke-1.2" />
+                    
+                    {/* Arms (Strong) */}
+                    <path d="M 46 115 C 34 135, 24 165, 21 195 C 18 215, 22 230, 26 240" className="stroke-indigo-700/25 fill-transparent stroke-1" />
+                    <path d="M 154 115 C 166 135, 176 165, 179 195 C 182 215, 178 230, 174 240" className="stroke-indigo-700/25 fill-transparent stroke-1" />
+                    
+                    {/* Side body profile boundaries (V-Taper) */}
+                    <path d="M 58 115 Q 52 140 68 180 L 74 215 L 78 245 M 142 115 Q 148 140 132 180 L 126 215 L 122 245" className="stroke-indigo-750/35 fill-transparent stroke-1.2" strokeDasharray="3,3" />
+                    
+                    {/* Hip & Leg outlines (Powerful build) */}
+                    <path d="M 78 245 L 81 310 L 83 385 M 122 245 L 119 310 L 117 385" className="stroke-indigo-700/25 fill-transparent stroke-1.2" />
+                    <path d="M 100 245 L 94 385 M 100 245 L 106 385" className="stroke-indigo-800/20 fill-transparent stroke-1" strokeDasharray="1,4" />
+                  </g>
+
+                  {/* INTERACTIVE BODY ZONES */}
+                  {/* LIPS */}
+                  <path 
+                    onClick={() => handleZoneTouch("lips")}
+                    d="M 88 51 C 92 48, 96 48, 100 51 C 104 48, 108 48, 112 51 C 113 53, 109 56, 100 56 C 91 56, 88 53, 88 51 Z" 
+                    className={`cursor-pointer transition-all duration-300 ${
+                      vtCurrentTouch === "lips" 
+                        ? "stroke-pink-500 fill-pink-500/65" 
+                        : "stroke-pink-500/30 fill-transparent hover:stroke-pink-400 hover:fill-pink-500/10"
+                    }`}
+                    strokeWidth={vtCurrentTouch === "lips" ? "3" : "1.5"}
+                    filter={vtCurrentTouch === "lips" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="male-lips"
+                  />
+
+                  {/* NECK */}
+                  <path 
+                    onClick={() => handleZoneTouch("neck")}
+                    d="M 90 58 L 110 58 Q 108 73 106 82 Q 100 84 94 82 Q 92 73 90 58 Z" 
+                    className={`cursor-pointer transition-all duration-300 ${
+                      vtCurrentTouch === "neck" 
+                        ? "stroke-pink-500 fill-pink-500/65" 
+                        : "stroke-pink-500/25 fill-transparent hover:stroke-pink-350 hover:fill-pink-500/15"
+                    }`}
+                    strokeWidth={vtCurrentTouch === "neck" ? "3.5" : "1.5"}
+                    filter={vtCurrentTouch === "neck" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="male-neck"
+                  />
+
+                  {/* COLLARBONE */}
+                  <path 
+                    onClick={() => handleZoneTouch("collarbone")}
+                    d="M 58 84 Q 100 90 142 84 L 144 94 Q 100 100 56 94 Z" 
+                    className={`cursor-pointer transition-all duration-300 ${
+                      vtCurrentTouch === "collarbone" 
+                        ? "stroke-purple-500 fill-purple-550/65" 
+                        : "stroke-purple-500/25 fill-transparent hover:stroke-purple-400 hover:fill-purple-500/15"
+                    }`}
+                    strokeWidth={vtCurrentTouch === "collarbone" ? "3" : "1.5"}
+                    filter={vtCurrentTouch === "collarbone" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="male-collarbone"
+                  />
+
+                  {/* UPPER CHEST (MASCULINE PECS) */}
+                  <path 
+                    onClick={() => handleZoneTouch("chest")}
+                    d="M 62 96 Q 100 102 138 96 L 140 128 C 120 130, 105 130, 100 114 C 95 130, 80 130, 60 128 Z" 
+                    className={`cursor-pointer transition-all duration-300 ${
+                      vtCurrentTouch === "chest" 
+                        ? "stroke-[#3b82f6] fill-[#3b82f6]/45" 
+                        : "stroke-[#3b82f6]/30 fill-transparent hover:stroke-blue-400 hover:fill-[#3b82f6]/10"
+                    }`}
+                    strokeWidth={vtCurrentTouch === "chest" ? "3" : "1.5"}
+                    filter={vtCurrentTouch === "chest" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="male-pecs-chest"
+                  />
+
+                  {/* MID CHEST (ABS BLOCK PACKS) */}
+                  <g
+                    onClick={() => handleZoneTouch("mid_chest")}
+                    className={`cursor-pointer transition-all duration-300 ${
+                      vtCurrentTouch === "mid_chest" 
+                        ? "stroke-[#22c55e] fill-[#22c55e]/40" 
+                        : "stroke-[#22c55e]/25 fill-transparent hover:stroke-green-400 hover:fill-[#22c55e]/10"
+                    }`}
+                    filter={vtCurrentTouch === "mid_chest" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="male-abs-mid-chest"
+                  >
+                    <path 
+                      d="M 64 128 Q 100 130 136 128 L 132 176 Q 100 178 68 176 Z"
+                      strokeWidth={vtCurrentTouch === "mid_chest" ? "2.5" : "1.2"}
+                    />
+                    {/* Masculine Abs grid splits inside */}
+                    <line x1="100" y1="130" x2="100" y2="176" strokeWidth="1" strokeDasharray="2,2" className="opacity-40" />
+                    <line x1="74" y1="145" x2="126" y2="145" strokeWidth="1" strokeDasharray="2,2" className="opacity-40" />
+                    <line x1="72" y1="160" x2="128" y2="160" strokeWidth="1" strokeDasharray="2,2" className="opacity-40" />
+                  </g>
+
+                  {/* MASCULINE NIPPLES */}
+                  <g 
+                    onClick={() => handleZoneTouch("nipples")}
+                    className={`cursor-pointer transition-all duration-300 ${
+                      vtCurrentTouch === "nipples" 
+                        ? "stroke-pink-500 fill-pink-500/60" 
+                        : "stroke-pink-500/25 fill-transparent hover:stroke-pink-400 hover:fill-pink-500/10"
+                    }`}
+                    filter={vtCurrentTouch === "nipples" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="male-nipples"
+                  >
+                    {/* Left Nipple Dot */}
+                    <circle cx="76" cy="120" r="6" strokeWidth={vtCurrentTouch === "nipples" ? "2.5" : "1"} />
+                    <circle cx="76" cy="120" r="1.5" fill="#ec4899" className={vtCurrentTouch === "nipples" ? "animate-ping" : ""} />
+                    {/* Right Nipple Dot */}
+                    <circle cx="124" cy="120" r="6" strokeWidth={vtCurrentTouch === "nipples" ? "2.5" : "1"} />
+                    <circle cx="124" cy="120" r="1.5" fill="#ec4899" className={vtCurrentTouch === "nipples" ? "animate-ping" : ""} />
+                  </g>
+
+                  {/* WAIST (V-Belt & Obliques) */}
+                  <path 
+                    onClick={() => handleZoneTouch("waist")}
+                    d="M 68 176 Q 100 178 132 176 L 126 212 L 74 212 Z" 
+                    className={`cursor-pointer transition-all duration-300 ${
+                      vtCurrentTouch === "waist" 
+                        ? "stroke-red-500 fill-red-500/60" 
+                        : "stroke-red-500/25 fill-transparent hover:stroke-red-350 hover:fill-red-500/15"
+                    }`}
+                    strokeWidth={vtCurrentTouch === "waist" ? "3" : "1.5"}
+                    filter={vtCurrentTouch === "waist" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="male-waist"
+                  />
+
+                  {/* GROIN / SHAFT (VAGINA INTERNALLY) */}
+                  <g
+                    onClick={() => handleZoneTouch("vagina")}
+                    className={`cursor-pointer transition-all duration-350 ${
+                      vtCurrentTouch === "vagina" 
+                        ? "stroke-[#a855f7] fill-[#a855f7]/60" 
+                        : "stroke-[#a855f7]/25 fill-transparent hover:stroke-purple-400 hover:fill-[#a855f7]/15"
+                    }`}
+                    filter={vtCurrentTouch === "vagina" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="male-groin"
+                  >
+                    <path 
+                      d="M 74 212 L 126 212 L 122 245 C 112 245, 105 248, 100 248 C 95 248, 88 245, 78 245 Z"
+                      strokeWidth={vtCurrentTouch === "vagina" ? "2.5" : "1.2"}
+                    />
+                    {/* Centered shaft pulsing indicator bulged down */}
+                    <line x1="100" y1="216" x2="100" y2="238" strokeWidth="3" stroke="#a855f7" className={vtCurrentTouch === "vagina" ? "animate-pulse" : "opacity-30"} />
+                  </g>
+
+                  {/* THIGHS */}
+                  <g
+                    onClick={() => handleZoneTouch("thighs")}
+                    className={`cursor-pointer transition-all duration-300 ${
+                      vtCurrentTouch === "thighs" 
+                        ? "stroke-purple-600 fill-purple-600/70" 
+                        : "stroke-purple-600/20 fill-transparent hover:stroke-purple-400 hover:fill-purple-600/15"
+                    }`}
+                    filter={vtCurrentTouch === "thighs" ? "url(#neon-hot)" : "url(#neon-ambient)"}
+                    id="male-thighs"
+                  >
+                    <path d="M 78 245 L 98 245 L 96 335 L 81 335 Z" strokeWidth={vtCurrentTouch === "thighs" ? "2.5" : "1.2"} />
+                    <path d="M 122 245 L 102 245 L 104 335 L 119 335 Z" strokeWidth={vtCurrentTouch === "thighs" ? "2.5" : "1.2"} />
+                  </g>
+                </>
+              )}
             </svg>
 
             {/* Glowing spot pointer mapping indicator when touched */}
@@ -539,249 +877,6 @@ export default function VirtualTouchGame({
           <span className="text-[9px] font-mono text-zinc-500 mt-3 hover:text-zinc-400 select-none">
             {isToucher ? "Tap any glowing body part zone above to touch" : "Wait for your partner's tactile touch"}
           </span>
-        </div>
-
-        {/* Right Side: Gameplay Status, Media Capture, or Seductive Verification Panel */}
-        <div className="flex flex-col bg-zinc-950/45 border border-white/5 rounded-2xl p-4 min-h-[360px] justify-between relative overflow-hidden shadow-2xl">
-          <div className="absolute inset-0 bg-radial-to-br from-pink-500/[0.02] to-transparent pointer-events-none" />
-          
-          <AnimatePresence mode="wait">
-            
-            {/* STATE 1: WAITING FOR TOUCH */}
-            {vtState === "waiting_for_touch" && (
-              <motion.div 
-                key="waiting_for_touch"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="flex-1 flex flex-col items-center justify-center text-center space-y-4"
-              >
-                <div className="w-14 h-14 rounded-full bg-linear-to-tr from-purple-500/20 to-pink-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.15)]">
-                  <Smartphone className="w-6.5 h-6.5 text-[#e11d48] animate-bounce" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold tracking-wide uppercase text-white">
-                    {isToucher ? "Choose Forbidden Focal Point" : `Waiting for ${myPartnerName}`}
-                  </h3>
-                  <p className="text-[11px] text-zinc-400 leading-relaxed font-light mt-1.5 max-w-[240px] mx-auto">
-                    {isToucher 
-                      ? "Select one sensitive zone on the interactive wireframe silhouette. Tapping a node will illuminate your partner's dashboard instantly." 
-                      : `Relax and get ready. ${myPartnerName} is currently exploring the tactile body grid to issue a teasing command.`}
-                  </p>
-                </div>
-
-                {!isToucher && (
-                  <div className="bg-white/[0.01] border border-white/5 rounded-xl px-4 py-2 font-mono text-[9px] text-[#be185d] animate-pulse">
-                    🟢 SIGNAL SENSOR SYNCED: READY FOR INCOMING COMMANDS
-                  </div>
-                )}
-              </motion.div>
-            )}
-
-            {/* STATE 2: TOUCH RECEIVED, NEEDING PRIVATE WEBCAM RECORDING */}
-            {vtState === "waiting_for_response" && activeZone && (
-              <motion.div 
-                key="waiting_for_response"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="flex-1 flex flex-col justify-between h-full"
-              >
-                {/* Text explanation */}
-                <div className="space-y-3 text-left">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-500/10 border border-pink-500/30 text-[9px] font-mono text-pink-400 tracking-wider uppercase animate-pulse">
-                    💖 Focus Target: {activeZone.name}
-                  </div>
-                  <h3 className="text-md font-bold text-zinc-100">
-                    {isReceiver ? "Take Provocative Compliance Video" : `Partner's Compliance Required`}
-                  </h3>
-                  <p className="text-[11.5px] text-zinc-300 font-light leading-relaxed">
-                    {isReceiver 
-                      ? activeZone.description 
-                      : `Requested ${myPartnerName} to capture a seductive 5-10 second clip focusing precisely on their ${activeZone.name}. They are on camera now.`}
-                  </p>
-                </div>
-
-                {isReceiver && (
-                  <div className="my-4 flex-1 flex flex-col justify-center items-center">
-                    {!isCameraActive ? (
-                      <button
-                        type="button"
-                        onClick={handleLaunchCamera}
-                        className="w-full py-4 bg-linear-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-mono text-[10px] tracking-widest uppercase rounded-2xl shadow-lg border border-pink-500/30 transition-all font-bold flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                      >
-                        <Camera className="w-4.5 h-4.5 text-white animate-pulse" />
-                        INITIATE PRIVATE CAMERA
-                      </button>
-                    ) : (
-                      <div className="w-full space-y-3">
-                        <div className="aspect-video bg-black rounded-xl overflow-hidden border border-dashed border-pink-500/30 relative flex items-center justify-center shadow-inner">
-                          <video 
-                            ref={videoPreviewRef} 
-                            autoPlay 
-                            playsInline 
-                            muted
-                            className="w-full h-full object-cover rounded-xl"
-                          />
-                          
-                          {/* Live video timer pulse overlay */}
-                          <div className="absolute top-2 right-2 bg-black/80 border border-pink-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
-                            <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />
-                            <span className="text-[8.5px] font-mono text-pink-300">{recordingSeconds}s / 10s</span>
-                          </div>
-
-                          {/* 5s minimum notice overlay */}
-                          {isRecording && recordingSeconds < 5 && (
-                            <div className="absolute bottom-2 left-2 bg-red-950/80 text-rose-300 border border-red-500/30 px-2 py-0.5 rounded-lg text-[8px] font-mono">
-                              Keep recording! Min 5 seconds required.
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex gap-2">
-                          {!isRecording ? (
-                            <button
-                              type="button"
-                              onClick={handleStartRecording}
-                              className="flex-1 py-2 bg-red-650 hover:bg-red-550 text-white font-mono text-[9px] tracking-wider uppercase rounded-xl border border-red-500/40 transition-all font-bold cursor-pointer"
-                            >
-                              🔴 RECORD CLIP
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={handleStopRecording}
-                              className="flex-1 py-2 bg-zinc-900 border border-white/20 text-white font-mono text-[9px] tracking-wider uppercase rounded-xl transition-all font-bold cursor-pointer"
-                            >
-                              ⬜ STOP RECORDING
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={stopCamera}
-                            className="px-4 bg-zinc-900 hover:bg-zinc-850 border border-white/5 hover:border-white/10 text-zinc-400 hover:text-white rounded-xl transition-all cursor-pointer"
-                            title="Cancel Camera"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-
-                        {recordedVideoBlobUrl && (
-                          <div className="p-3 bg-pink-950/10 border border-pink-500/20 rounded-xl space-y-2">
-                            <span className="text-[8px] font-mono text-pink-300 block uppercase font-bold text-center">
-                              📼 Sensual Video Tape Captured ({recordingSeconds} seconds)
-                            </span>
-                            <button
-                              type="button"
-                              disabled={isUploading}
-                              onClick={handleSubmitResponse}
-                              className="w-full py-2.5 bg-emerald-650 hover:bg-emerald-550 text-white font-bold font-mono text-[9.5px] tracking-widest uppercase rounded-lg border border-emerald-500/30 transition-all cursor-pointer disabled:opacity-40"
-                            >
-                              {isUploading ? "TRANSMITTING TO ACTIVE PARTNER..." : "🚀 SUBMIT COMPLIANCE CLIP"}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {!isReceiver && (
-                  <div className="w-full p-4 bg-violet-950/15 border border-violet-500/20 rounded-xl text-center space-y-2 mt-4">
-                    <Smartphone className="w-5 h-5 text-purple-400 mx-auto animate-bounce" />
-                    <span className="text-[10px] font-mono text-purple-300 block uppercase font-bold">
-                      Waiting for Partner Response
-                    </span>
-                    <p className="text-[9.5px] text-zinc-400 font-light">
-                      {myPartnerName} received your touch notification. Stand by while they activate their private lens.
-                    </p>
-                  </div>
-                )}
-              </motion.div>
-            )}
-
-            {/* STATE 3: WAITING FOR APPROVAL (MEDIA PLAYER LOADED) */}
-            {vtState === "waiting_for_approval" && (
-              <motion.div 
-                key="waiting_for_approval"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="flex-1 flex flex-col justify-between h-full space-y-3"
-              >
-                <div className="text-left space-y-1">
-                  <span className="text-[8px] font-mono bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 px-2.5 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
-                    🟢 SUBMISSION READY
-                  </span>
-                  <h3 className="text-sm font-bold text-zinc-100">
-                    {isToucher ? "Verify Partner's Sensual Compliance" : `Awaiting Partner's Evaluation`}
-                  </h3>
-                  <p className="text-[11px] text-zinc-400 font-light leading-relaxed">
-                    {isToucher 
-                      ? `Watch ${myPartnerName}'s responsive private tape below. Make an evaluation to swap roles or trigger a retake.` 
-                      : `Your sensual clip has been successfully securely funneled onto ${myPartnerName}'s dashboard screen. Waiting for them to approve.`}
-                  </p>
-                </div>
-
-                {/* Media representation player or base64 reader */}
-                <div className="my-3 filter drop-shadow-[0_0_15px_rgba(168,85,247,0.15)]">
-                  {vtVerificationVideoUrl ? (
-                    <div className="rounded-xl overflow-hidden aspect-video bg-black border border-white/10 relative shadow-2xl">
-                      <video 
-                        src={vtVerificationVideoUrl} 
-                        controls 
-                        playsInline
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute top-2 left-2 bg-black/60 border border-purple-500/25 rounded px-2 py-0.5 text-[8px] font-mono text-purple-300 uppercase">
-                        TAPED TARGET: {activeZone?.name}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="aspect-video bg-[#0a0a0c] border border-dashed border-white/5 rounded-xl flex flex-col items-center justify-center p-4">
-                      <Video className="w-6 h-6 text-zinc-600 animate-pulse mb-1" />
-                      <span className="text-[9px] font-mono text-zinc-500 uppercase">Loading secure live clip...</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Decision tools only for Toucher */}
-                {isToucher && (
-                  <div className="space-y-2 mt-2">
-                    <button
-                      type="button"
-                      onClick={handleApproveTouch}
-                      className="w-full py-2.5 bg-emerald-650 hover:bg-emerald-550 border border-emerald-500/30 text-white font-bold font-mono text-[9px] tracking-widest uppercase rounded-lg shadow-md transition-all flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      <Check className="w-3.5 h-3.5 text-white" />
-                      APPROVE (SWAP TURNS)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleRejectTouch}
-                      className="w-full py-2 bg-red-950/20 hover:bg-red-900/30 border border-red-500/20 text-rose-300 hover:text-white font-mono text-[8.5px] tracking-wider uppercase rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                      REJECT (FORCE TEASE AGAIN)
-                    </button>
-                  </div>
-                )}
-
-                {!isToucher && (
-                  <div className="bg-white/[0.01] border border-white/5 rounded-xl py-3 px-4 text-center mt-3 animate-pulse">
-                    <span className="text-[10px] text-zinc-400 font-mono tracking-wider uppercase block">
-                      ⏳ WAITING ON ACTIVE DECISION
-                    </span>
-                    <p className="text-[8.5px] text-zinc-500 font-mono mt-1 italic">
-                      Partner is currently reviewing your exclusive video.
-                    </p>
-                  </div>
-                )}
-              </motion.div>
-            )}
-
-          </AnimatePresence>
         </div>
       </div>
 

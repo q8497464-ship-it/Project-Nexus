@@ -438,7 +438,14 @@ export default function App() {
     } else if (gameMode === "online" && isFirebaseSupported && db) {
       try {
         const docRef = doc(db, "rooms", gameState.id);
-        await setDoc(docRef, updatedModel, { merge: true });
+        const cleanedModel: any = {};
+        Object.keys(updatedModel).forEach((key) => {
+          const val = (updatedModel as any)[key];
+          if (val !== undefined) {
+            cleanedModel[key] = val;
+          }
+        });
+        await setDoc(docRef, cleanedModel, { merge: true });
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, `rooms/${gameState.id}`);
       }
@@ -888,12 +895,64 @@ export default function App() {
     triggerAlert("Submission rejected! Ordered Sub to film a better compliance clip.", "error");
   };
 
+  const handleVirtualTouchApprove = async () => {
+    if (!gameState) return;
+    soundManager.play("success");
+
+    const isReceiverHost = gameState.vtReceiverId === gameState.hostId;
+    const isReceiverGuest = gameState.vtReceiverId === (gameState.guestId || "usr_guest");
+
+    const addedScoreHost = isReceiverHost ? (gameState.scoreHost + 1) : gameState.scoreHost;
+    const addedScoreGuest = isReceiverGuest ? (gameState.scoreGuest + 1) : gameState.scoreGuest;
+
+    await updateRoomState({
+      vtToucherId: gameState.vtReceiverId,
+      vtReceiverId: gameState.vtToucherId,
+      vtState: "waiting_for_touch",
+      vtCurrentTouch: "",
+      vtVerificationVideoUrl: "",
+      scoreHost: addedScoreHost,
+      scoreGuest: addedScoreGuest
+    });
+
+    triggerAlert("Task Approved! +1 Tactile point rewarded! Roles swapped. 🥵🔥", "success");
+  };
+
+  const handleVirtualTouchReject = async () => {
+    if (!gameState) return;
+    soundManager.play("error");
+
+    await updateRoomState({
+      vtState: "waiting_for_response",
+      vtVerificationVideoUrl: ""
+    });
+
+    triggerAlert("Submission rejected! Ordered partner to film a more sensual touch reaction.", "error");
+  };
+
   // CALLBACK CALLED WHEN PARTNER OR YOU SENDS MESSAGE
   const handleChatMessageSent = (msg: ChatMessage) => {
     if (!gameState || !currentUser) return;
 
     // Trigger feedback ping
     soundManager.play("ping");
+
+    // --- CASE D: VIRTUAL TOUCH WORKFLOW VIA CHATROOM ---
+    if (gameState.selectedGameId === "virtual_touch") {
+      const isReceiverSender = msg.senderId === gameState.vtReceiverId;
+      if (isReceiverSender && gameState.vtState === "waiting_for_response") {
+        if (msg.mediaType === "video" && msg.mediaUrl) {
+          updateRoomState({
+            vtState: "waiting_for_approval",
+            vtVerificationVideoUrl: msg.mediaUrl,
+            ccVerificationDriveUrl: msg.driveFileUrl || "",
+            lastActionBy: msg.senderId
+          });
+          triggerAlert("Sensual response clip received in chatroom! Sent to partner for approval. 🎥🔥", "success");
+          return;
+        }
+      }
+    }
 
     // --- CASE C: COMMAND & CONTROL WORKFLOW VIA CHATROOM ---
     if (gameState.selectedGameId === "command_control") {
@@ -1807,18 +1866,28 @@ export default function App() {
             )}
 
             {/* Bottom Half: Real-time Chatroom */}
-            <div className={`shrink-0 overflow-hidden bg-zinc-950/80 transition-all duration-300 ${gameState.selectedGameId === "command_control" ? "h-[320px]" : "h-[210px]"}`} id="device-chatroom-bottom">
+            <div className={`shrink-0 overflow-hidden bg-zinc-950/80 transition-all duration-300 ${
+              gameState.selectedGameId === "command_control" || gameState.selectedGameId === "virtual_touch" 
+                ? "h-[390px]" 
+                : "h-[285px]"
+            }`} id="device-chatroom-bottom">
               <Chatroom 
                 roomId={gameState.id} 
                 currentUser={viewer} 
                 gameMode={gameMode} 
                 triggerAlert={triggerAlert} 
                 onMessageSent={handleChatMessageSent}
-                isApprovalPending={gameState.approvalState === "pending" || (gameState.selectedGameId === "command_control" && gameState.ccState === "waiting_for_approval")}
+                isApprovalPending={
+                  gameState.approvalState === "pending" || 
+                  (gameState.selectedGameId === "command_control" && gameState.ccState === "waiting_for_approval") ||
+                  (gameState.selectedGameId === "virtual_touch" && gameState.vtState === "waiting_for_approval")
+                }
                 gameState={gameState}
                 updateRoomState={updateRoomState}
                 onCommandApprove={handleCommandAndControlApprove}
                 onCommandReject={handleCommandAndControlReject}
+                onVirtualTouchApprove={handleVirtualTouchApprove}
+                onVirtualTouchReject={handleVirtualTouchReject}
               />
             </div>
           </div>

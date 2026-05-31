@@ -29,6 +29,7 @@ import {
 import { GameState, Player } from "../types";
 import { db, isFirebaseSupported, onSnapshot, doc, setDoc, getDoc } from "../lib/firebase";
 import { getStoredDriveToken, findOrCreateFolder, uploadFileToDrive } from "../lib/drive";
+import { soundManager } from "../lib/sound";
 
 interface CommandAndControlProps {
   gameState: GameState;
@@ -330,12 +331,7 @@ export default function CommandAndControlGame({
   // Sound effects matching Nexus Pairs aesthetic
   const playAudioCue = (type: "chime" | "ping") => {
     try {
-      const url = type === "chime" 
-        ? "https://assets.mixkit.co/active_storage/sfx/2568/2568-84.wav"
-        : "https://assets.mixkit.co/active_storage/sfx/2019/2019-84.wav";
-      const audio = new Audio(url);
-      audio.volume = 0.12;
-      audio.play().catch(() => {});
+      soundManager.play(type);
     } catch (e) {}
   };
 
@@ -1272,9 +1268,11 @@ export default function CommandAndControlGame({
               Assess your submissive partner's full body nude proof. Watch carefully to make sure they complied.
             </p>
 
-            <div className="w-full rounded-2xl overflow-hidden aspect-video bg-black border border-emerald-500/10 mt-4 shadow-xl">
-              <video src={ccData.ccLoserNudeVideoUrl} controls autoPlay loop playsInline className="w-full h-full object-cover" />
-            </div>
+            {ccData.ccLoserNudeVideoUrl && (
+              <div className="w-full rounded-2xl overflow-hidden aspect-video bg-black border border-emerald-500/10 mt-4 shadow-xl">
+                <video src={ccData.ccLoserNudeVideoUrl} controls autoPlay loop playsInline className="w-full h-full object-cover" />
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3.5 mt-5">
               <button
@@ -1527,9 +1525,11 @@ export default function CommandAndControlGame({
                 INCOMING COMPLIANCE TEASER MONITOR (8 SECONDS)
               </span>
 
-              <div className="rounded-xl overflow-hidden bg-black aspect-video relative flex items-center justify-center border border-white/[0.04] shadow-md shadow-pink-500/5">
-                <video src={ccData.ccVerificationVideoUrl} controls autoPlay loop playsInline className="w-full h-full object-cover" />
-              </div>
+              {ccData.ccVerificationVideoUrl && (
+                <div className="rounded-xl overflow-hidden bg-black aspect-video relative flex items-center justify-center border border-white/[0.04] shadow-md shadow-pink-500/5">
+                  <video src={ccData.ccVerificationVideoUrl} controls autoPlay loop playsInline className="w-full h-full object-cover" />
+                </div>
+              )}
 
               {ccData.ccVerificationDriveUrl && (
                 <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-between text-left text-[9.5px]">
