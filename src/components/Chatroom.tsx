@@ -141,7 +141,7 @@ export default function Chatroom({
     }
   });
 
-  // Time ticker state for instant 30 second client-side message disappearing countdown
+  // Time ticker state for instant 60 second client-side message disappearing countdown
   const [currentTime, setCurrentTime] = useState(Date.now());
   useEffect(() => {
     const clockInterval = setInterval(() => {
@@ -310,6 +310,7 @@ export default function Chatroom({
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const [audioPlaybackUrl, setAudioPlaybackUrl] = useState<string | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const lastScreenshotSentRef = useRef<number>(0);
 
   // --- Real-time Sync of messages ---
   useEffect(() => {
@@ -454,7 +455,7 @@ export default function Chatroom({
           const startTime = new Date(msg.createdAt).getTime();
           const ageSecs = (now - startTime) / 1000;
           
-          if (ageSecs >= 30) { // Wipe all message types after exactly 30 seconds (ultra-secured)
+          if (ageSecs >= 60) { // Wipe all message types after exactly 60 seconds (ultra-secured)
             if (gameMode === "online" && isFirebaseSupported && db && roomId) {
               // Delete message securely from Firestore
               deleteDoc(doc(db, "rooms", roomId, "messages", msg.id))
@@ -655,6 +656,73 @@ export default function Chatroom({
       window.dispatchEvent(new Event("storage"));
     }
   };
+
+  // --- REAL-TIME SCREENSHOT & SECURE PRIVATE VAULT INTRUSION DETECTOR ---
+  useEffect(() => {
+    const notifyPartnerOfScreenshot = (reason: string) => {
+      const now = Date.now();
+      // Throttle alerts/messages to once every 10 seconds per client to avoid spam
+      if (now - lastScreenshotSentRef.current < 10000) return;
+      lastScreenshotSentRef.current = now;
+
+      triggerAlert(`📸 SCREENSHOT ALERT: You took a screenshot! Partner has been notified.`, "error");
+      
+      const notificationText = `⚠️ SCREENSHOT ALERT: Apky partner (${currentUser.name}) ny chat ya picture ka screenshot liya ha! (${currentUser.name} has captured a screenshot of your active chat or picture!) 📸🚨`;
+      dispatchMessage(notificationText, "text");
+    };
+
+    const handleScreenshotKeys = (e: KeyboardEvent) => {
+      let isScreenshotKey = false;
+      
+      // 1. Detect standard PC/Linux PrintScreen key
+      if (e.key === "PrintScreen" || e.keyCode === 44) {
+        isScreenshotKey = true;
+      }
+      
+      // 2. Detect common desktop snip/screenshot hotkeys:
+      // - Windows: Win/Cmd + Shift + S
+      // - macOS: Cmd + Shift + 3 / 4 / 5 or Cmd + S
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && ["3", "4", "5", "S", "s"].includes(e.key)) {
+        isScreenshotKey = true;
+      }
+      if ((e.metaKey || e.ctrlKey) && ["s", "S"].includes(e.key)) {
+        isScreenshotKey = true;
+      }
+
+      if (isScreenshotKey) {
+        notifyPartnerOfScreenshot("key combination");
+      }
+    };
+
+    const handleFocusLossOrAppSwitch = () => {
+      // Mobile screenshotting triggers a temporary window blur / state change.
+      // If a private photo/video lightbox is open, this blur is practically guaranteed to suggest capturing or backing up the screen.
+      if (activeMediaUrl) {
+        notifyPartnerOfScreenshot("media view snapshot");
+      } else {
+        // General chat interaction blur warning (e.g. going to other apps or taking snapshots inside chatroom)
+        notifyPartnerOfScreenshot("chat screen snapshot");
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        if (activeMediaUrl) {
+          notifyPartnerOfScreenshot("hidden media view");
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleScreenshotKeys, true);
+    window.addEventListener("blur", handleFocusLossOrAppSwitch);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("keydown", handleScreenshotKeys, true);
+      window.removeEventListener("blur", handleFocusLossOrAppSwitch);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [currentUser, activeMediaUrl, roomId, gameMode, dispatchMessage, triggerAlert]);
 
   const handleSendTextMessage = async (e: FormEvent) => {
     e.preventDefault();
@@ -1231,7 +1299,7 @@ export default function Chatroom({
           if (!msg.createdAt) return true;
           const startTime = new Date(msg.createdAt).getTime();
           const ageMs = currentTime - startTime;
-          return ageMs < 30000; // Filter on current 500ms reactive timer clock
+          return ageMs < 60000; // Filter on current 500ms reactive timer clock
         }).map((msg) => {
           const isMe = msg.senderId === currentUser.id;
           const isSystem = msg.senderId === "system";
@@ -1248,7 +1316,7 @@ export default function Chatroom({
 
           const msgTime = msg.createdAt ? new Date(msg.createdAt).getTime() : Date.now();
           const ageSeconds = Math.max(0, Math.floor((currentTime - msgTime) / 1000));
-          const remainingSeconds = Math.max(0, 30 - ageSeconds);
+          const remainingSeconds = Math.max(0, 60 - ageSeconds);
 
           return (
             <div
