@@ -1799,7 +1799,7 @@ export default function App() {
             )}
 
             {/* Bottom Half: Real-time Chatroom */}
-            <div className="h-[210px] shrink-0 overflow-hidden bg-zinc-950/80" id="device-chatroom-bottom">
+            <div className={`shrink-0 overflow-hidden bg-zinc-950/80 transition-all duration-300 ${gameState.selectedGameId === "command_control" ? "h-[320px]" : "h-[210px]"}`} id="device-chatroom-bottom">
               <Chatroom 
                 roomId={gameState.id} 
                 currentUser={viewer} 
