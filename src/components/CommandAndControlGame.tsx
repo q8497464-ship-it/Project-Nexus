@@ -53,6 +53,30 @@ const EROTIC_TASKS = [
   "Kiss the camera lens sensually, moving your tongue on it like you're teasing Master."
 ];
 
+function createLowBitrateRecorder(stream: MediaStream): MediaRecorder {
+  const optionsTypes = [
+    { mimeType: "video/webm;codecs=vp8", videoBitsPerSecond: 80000 },
+    { mimeType: "video/webm", videoBitsPerSecond: 80000 },
+    { mimeType: "video/mp4", videoBitsPerSecond: 80000 },
+  ];
+
+  for (const opt of optionsTypes) {
+    try {
+      if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(opt.mimeType)) {
+        return new MediaRecorder(stream, opt);
+      }
+    } catch (e) {
+      // try next
+    }
+  }
+
+  try {
+    return new MediaRecorder(stream, { videoBitsPerSecond: 80000 });
+  } catch (e) {
+    return new MediaRecorder(stream);
+  }
+}
+
 export default function CommandAndControlGame({
   gameState,
   currentUser,
@@ -481,7 +505,10 @@ export default function CommandAndControlGame({
     setRecordedVideoUrl(null);
     setVideoCountdown(8);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { ideal: 15 } },
+        audio: false
+      });
       streamRef.current = stream;
       if (videoPreviewRef.current) {
         videoPreviewRef.current.srcObject = stream;
@@ -498,7 +525,7 @@ export default function CommandAndControlGame({
 
     if (streamRef.current) {
       try {
-        const recorder = new MediaRecorder(streamRef.current);
+        const recorder = createLowBitrateRecorder(streamRef.current);
         mediaRecorderRef.current = recorder;
         recorder.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
@@ -616,7 +643,10 @@ export default function CommandAndControlGame({
     setRecordedVideoUrl(null);
     setPenaltyCountdown(30);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { ideal: 15 } },
+        audio: false
+      });
       streamRef.current = stream;
       if (videoPreviewRef.current) {
         videoPreviewRef.current.srcObject = stream;
@@ -634,7 +664,7 @@ export default function CommandAndControlGame({
 
     if (streamRef.current) {
       try {
-        const recorder = new MediaRecorder(streamRef.current);
+        const recorder = createLowBitrateRecorder(streamRef.current);
         mediaRecorderRef.current = recorder;
         recorder.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
@@ -1268,6 +1298,98 @@ export default function CommandAndControlGame({
     );
   }
 
+  // VIEW: STYLISH GAME INSTRUCTIONS CARD AT THE TOP IN CC ACTIVE ROUND
+  if (ccState === "waiting_for_command" || ccState === "waiting_for_verification" || ccState === "waiting_for_approval") {
+    const minStr = Math.floor(timeLeft / 60).toString().padStart(2, "0");
+    const secStr = (timeLeft % 60).toString().padStart(2, "0");
+
+    const hostName = gameState.hostName || "Host";
+    const guestName = gameState.guestName || "Guest";
+    const hostScore = ccData.ccScoreHost || 0;
+    const guestScore = ccData.ccScoreGuest || 0;
+
+    const masterName = ccMasterId === gameState.hostId ? hostName : guestName;
+    const subName = ccSubId === gameState.hostId ? hostName : guestName;
+
+    return (
+      <div className="w-full flex flex-col gap-3.5 p-3.5 items-center text-center bg-[#070709] min-h-[280px] animate-fade-in border border-white/[0.04] rounded-3xl relative overflow-hidden" id="active-cc-instructions-card">
+        {/* Background glow shadow */}
+        <div className="absolute top-0 right-0 w-24 h-24 bg-pink-500/5 rounded-full blur-2xl pointer-events-none" />
+
+        {/* Connection status toolbar */}
+        <div className="w-full flex items-center justify-between border-b border-white/[0.04] pb-2 text-zinc-500">
+          <div className="flex items-center gap-1.5 focus:scale-105">
+            <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-ping" />
+            <span className="text-[8px] font-mono tracking-widest text-pink-400 font-extrabold uppercase font-bold">COMMAND & CONTROL SESSION ACTIVE</span>
+          </div>
+          <button 
+            type="button"
+            onClick={handleResetRoles}
+            className="text-[8px] font-mono px-2 py-0.5 rounded-lg text-zinc-400 hover:text-white bg-zinc-950 border border-white/[0.05] hover:bg-zinc-90 w-max transition-all cursor-pointer uppercase font-semibold"
+          >
+            End Call
+          </button>
+        </div>
+
+        {/* Match statistics matrix card */}
+        <div className="w-full grid grid-cols-3 gap-2 px-3 py-2 bg-black/60 border border-white/[0.03] rounded-2xl items-center text-left">
+          <div className="font-mono">
+            <span className="text-[7.5px] text-zinc-550 block uppercase tracking-wider font-extrabold">Active Status</span>
+            <span className="text-[10px] text-pink-400 font-extrabold block mt-0.5 animate-pulse">ROUND {ccRound}</span>
+          </div>
+          <div className="text-center font-mono border-x border-white/5 py-1">
+            <span className="text-[7.5px] text-zinc-550 block uppercase tracking-wider font-extrabold">Time Left</span>
+            <span className="text-lg text-white font-bold block leading-none tracking-widest mt-0.5">
+              {minStr}:{secStr}
+            </span>
+          </div>
+          <div className="text-right font-mono">
+            <span className="text-[7.5px] text-zinc-550 block uppercase tracking-wider font-extrabold leading-none">Points scored</span>
+            <div className="flex flex-col gap-0.5 mt-1">
+              <span className="text-[8.5px] text-zinc-300 font-semibold truncate leading-none">
+                {hostName.split(" ")[0]}: <strong className="text-emerald-400 font-extrabold">{hostScore}</strong>
+               </span>
+              <span className="text-[8.5px] text-zinc-300 font-semibold truncate leading-none mt-1">
+                {guestName.split(" ")[0]}: <strong className="text-emerald-400 font-extrabold">{guestScore}</strong>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Swapped roles description strip */}
+        <div className="w-full py-1.5 px-3 rounded-xl border border-white/[0.02] bg-zinc-900/20 text-left font-mono text-[8.5px] text-zinc-450 flex items-center justify-between">
+          <span className="truncate">👑 Master User: <strong className="text-pink-300 font-bold">{masterName}</strong></span>
+          <span className="truncate">⛓️ Obedient Sub: <strong className="text-purple-300 font-bold">{subName}</strong></span>
+        </div>
+
+        {/* Instructions list display (Static helper always visible for users) */}
+        <div className="w-full text-left" id="cc-top-instructions-deck">
+          <div className="flex items-center gap-1 border-b border-white/[0.03] pb-1.5 mb-2">
+            <Heart className="w-3.5 h-3.5 text-pink-500 fill-pink-500/10 shrink-0" />
+            <h5 className="text-[9.5px] font-mono tracking-widest text-pink-400 font-bold uppercase">
+              LIVE GAME RULES & GUIDELINES
+            </h5>
+          </div>
+
+          <ul className="text-[9px] text-zinc-400 font-light flex flex-col gap-1.5 list-disc pl-4 leading-relaxed">
+            <li>
+              <strong className="text-zinc-200">Intimate Voice Notes:</strong> Master transmits orders directly in the chat below. Each voice note seamlessly autoplays on Sub's hardware!
+            </li>
+            <li>
+              <strong className="text-zinc-200">8s Compliance Teasers:</strong> Sub records and submits an 8-second video teaser clip right in this chatroom to demonstrate instant obedience before the Cam Shutter locks.
+            </li>
+            <li>
+              <strong className="text-zinc-200">Instant Verification:</strong> Master evaluates and approves/rejects directly in the chatroom below to change compliance points.
+            </li>
+            <li>
+              <strong className="text-zinc-200 text-rose-450">⚠️ Naked Loser Penalty:</strong> In Round 2, the roles are fully reversed. Once the 5 minutes round expires, the player with the lower compliance score faces a compulsory <strong className="text-red-400 font-bold">30-Second Naked Video Penalty Archive</strong>!
+            </li>
+          </ul>
+        </div>
+      </div>
+    );
+  }
+
   // VIEW D: ACTIVE MASTER INTUITIVE STREAMING CONTROL CONSOLE
   if (isMaster) {
     const minStr = Math.floor(timeLeft / 60).toString().padStart(2, "0");
@@ -1508,14 +1630,25 @@ export default function CommandAndControlGame({
         {/* SUB STATE E2: EXPLICIT DARE TRIGGER INCOMING - CAPTURE 8-SEC TEASER */}
         {ccState === "waiting_for_verification" && (
           <div className="w-full max-w-sm flex flex-col items-center gap-3.5 py-1 animate-fade-in" id="sub-verify">
-            <div className="w-full text-center flex flex-col gap-2">
-              <span className="text-[9px] font-mono text-pink-400 uppercase tracking-widest font-extrabold block animate-pulse">
-                💋 ACTIVE COMPLIANCE ORDER RECEIVED
+            
+            {/* 1. CHATROOM DIRECTIVE CARD (PROMINENT AT THE TOP) */}
+            <div className="w-full bg-gradient-to-br from-purple-950/40 via-zinc-950/90 to-pink-950/20 border border-purple-500/40 rounded-2xl p-4 text-center shadow-[0_0_25px_rgba(168,85,247,0.15)] flex flex-col items-center gap-2.5 animate-pulse">
+              <span className="text-[10px] font-mono font-black text-pink-400 tracking-wider flex items-center justify-center gap-1.5 uppercase">
+                🔥 COMPLY DIRECTLY VIA CHAT INTERFACE! 🔥
               </span>
-              
-              <h4 className="text-xs text-zinc-200 leading-relaxed bg-[#0e0a12] border border-pink-500/20 p-3 rounded-xl font-medium font-mono max-w-xs mx-auto w-full">
-                "{ccActiveSuggestion}"
-              </h4>
+              <p className="text-[10.5px] text-zinc-100 font-sans leading-relaxed">
+                Active Master Command: <strong className="text-pink-300 font-mono">"{ccActiveSuggestion}"</strong>
+              </p>
+              <div className="w-full h-[1px] bg-white/5 my-1" />
+              <p className="text-[9.5px] text-zinc-350 leading-relaxed font-sans">
+                Just tap the <strong className="text-purple-400">Camera / Vid icon 📹</strong> in the chatroom input box below, record your 8s compliance teaser, and press send! It automatically syncs to Drive, renders live in the chat, and prompts Master for approval.
+              </p>
+            </div>
+
+            <div className="w-full text-center flex flex-col gap-1 mt-1">
+              <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest block">
+                — OR SUBMIT VIA INTEGRATED CAM PLUG-IN DIRECTLY —
+              </span>
 
               {/* Seamless Audio Note Player Integration for Spoken Commands */}
               {ccData.ccCommandAudioUrl && (

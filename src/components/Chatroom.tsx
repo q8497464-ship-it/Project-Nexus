@@ -5,6 +5,43 @@ import { db, isFirebaseSupported, collection, addDoc, onSnapshot, doc, setDoc, g
 import { query, orderBy, limit } from "firebase/firestore";
 import { getStoredDriveToken, setStoredDriveToken, findOrCreateFolder, uploadFileToDrive, openImplicitGoogleAuth } from "../lib/drive";
 
+const EROTIC_TASKS = [
+  "Slowly strip another layer of clothing, looking seductively into Master's camera.",
+  "Tease and squeeze your nipples sensually for 5 seconds on camera.",
+  "Run your fingers down your waist, slide them into your underwear, and stroke yourself softly.",
+  "Expose your bare ass cheeks, give them a hot spank, and blow a deep request kiss.",
+  "Bite your lower lip and pull your top up, showing your naked belly and collarbone.",
+  "Slowly run your tongue across your upper lip, looking intensely into the camera.",
+  "Turn around, shake your hips provocatively for 5 seconds, and moan Master's name.",
+  "Close your eyes, run your cold fingers sensually down your neck and chest area.",
+  "Position the camera in a highly open, provocative layout, and smile naughtily.",
+  "Kiss the camera lens sensually, moving your tongue on it like you're teasing Master."
+];
+
+function createLowBitrateRecorder(stream: MediaStream): MediaRecorder {
+  const optionsTypes = [
+    { mimeType: "video/webm;codecs=vp8", videoBitsPerSecond: 80000 },
+    { mimeType: "video/webm", videoBitsPerSecond: 80000 },
+    { mimeType: "video/mp4", videoBitsPerSecond: 80000 },
+  ];
+
+  for (const opt of optionsTypes) {
+    try {
+      if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(opt.mimeType)) {
+        return new MediaRecorder(stream, opt);
+      }
+    } catch (e) {
+      // ignore and try next
+    }
+  }
+
+  try {
+    return new MediaRecorder(stream, { videoBitsPerSecond: 80000 });
+  } catch (e) {
+    return new MediaRecorder(stream);
+  }
+}
+
 function MessageTimer({ createdAt, isAdmin }: { createdAt: string; isAdmin: boolean }) {
   const [remaining, setRemaining] = useState<number | null>(null);
 
@@ -75,6 +112,10 @@ interface ChatroomProps {
   triggerAlert: (text: string, type: "success" | "info" | "error") => void;
   onMessageSent?: (msg: ChatMessage) => void;
   isApprovalPending?: boolean;
+  gameState?: any;
+  updateRoomState?: (updates: any) => Promise<void>;
+  onCommandApprove?: () => void;
+  onCommandReject?: () => void;
 }
 
 export default function Chatroom({
@@ -83,7 +124,11 @@ export default function Chatroom({
   gameMode,
   triggerAlert,
   onMessageSent,
-  isApprovalPending = false
+  isApprovalPending = false,
+  gameState,
+  updateRoomState,
+  onCommandApprove,
+  onCommandReject
 }: ChatroomProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputVal, setInputVal] = useState("");
@@ -286,7 +331,8 @@ export default function Chatroom({
             mediaType: data.mediaType,
             driveSynced: data.driveSynced,
             driveFileUrl: data.driveFileUrl,
-            filterId: data.filterId || ""
+            filterId: data.filterId || "",
+            ccStatus: data.ccStatus
           });
         });
         setMessages(list);
@@ -375,14 +421,26 @@ export default function Chatroom({
   useEffect(() => {
     if (isRecordingVideo) {
       videoTimerRef.current = setInterval(() => {
-        setVideoSecs((prev) => prev + 1);
+        setVideoSecs((prev) => {
+          const nextSecs = prev + 1;
+          const isCC = gameState?.selectedGameId === "command_control";
+          const ccState = gameState?.ccState || "";
+          if (isCC && ccState === "waiting_for_verification" && nextSecs >= 8) {
+            clearInterval(videoTimerRef.current);
+            setTimeout(() => {
+              stopVideoRecording();
+            }, 50);
+            return 8;
+          }
+          return nextSecs;
+        });
       }, 1000);
     } else {
       clearInterval(videoTimerRef.current);
       setVideoSecs(0);
     }
     return () => clearInterval(videoTimerRef.current);
-  }, [isRecordingVideo]);
+  }, [isRecordingVideo, gameState]);
 
   // --- SNAPCHAT-STYLE CHAT MESSAGE INDEPENDENT PURGE TICKER ---
   useEffect(() => {
@@ -429,6 +487,38 @@ export default function Chatroom({
     const mins = Math.floor(secs / 60);
     const remaining = secs % 60;
     return `${mins}:${remaining < 10 ? "0" : ""}${remaining}`;
+  };
+
+  // Update specific compliance message score status
+  const handleUpdateMessageStatus = async (msgId: string, status: "approved" | "rejected") => {
+    // 1. Update in Firestore if online
+    if (gameMode === "online" && isFirebaseSupported && db && roomId) {
+      try {
+        const msgDocRef = doc(db, "rooms", roomId, "messages", msgId);
+        await setDoc(msgDocRef, { ccStatus: status }, { merge: true });
+        console.log(`Firestore message ${msgId} status updated to:`, status);
+      } catch (err) {
+        console.error("Error updating message status in firestore:", err);
+      }
+    }
+
+    // 2. Update locally
+    const updatedList = messages.map(m => m.id === msgId ? { ...m, ccStatus: status } : m);
+    setMessages(updatedList);
+    localStorage.setItem(`chat_${roomId}`, JSON.stringify(updatedList));
+    // Dispatch storage event to notify siblings
+    window.dispatchEvent(new Event("storage"));
+
+    // 3. Trigger points and audit updates on App state
+    if (status === "approved") {
+      if (onCommandApprove) {
+        onCommandApprove();
+      }
+    } else {
+      if (onCommandReject) {
+        onCommandReject();
+      }
+    }
   };
 
   // SEND MSG HANDLER (Supports text, image, video, voice note, and filter selection presets)
@@ -643,7 +733,10 @@ export default function Chatroom({
     setCameraMode("photo");
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { ideal: 15 } },
+          audio: true
+        });
         videoStreamRef.current = stream;
         if (videoElementRef.current) {
           videoElementRef.current.srcObject = stream;
@@ -702,7 +795,7 @@ export default function Chatroom({
     videoChunksRef.current = [];
 
     if (videoStreamRef.current) {
-      const mediaRecorder = new MediaRecorder(videoStreamRef.current);
+      const mediaRecorder = createLowBitrateRecorder(videoStreamRef.current);
       mediaRecorderRef.current = mediaRecorder;
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -835,11 +928,262 @@ export default function Chatroom({
         </div>
       </div>
 
+      {/* COMMAND & CONTROL ACTIVE TASK DISPLAY PANEL */}
+      {gameState?.selectedGameId === "command_control" && gameState?.ccActiveSuggestion && (
+        <div className="bg-linear-to-r from-pink-950/35 via-purple-950/20 to-black/50 border-b border-pink-500/15 p-2.5 px-4 text-left flex items-center justify-between gap-3 shrink-0 animate-fade-in z-20">
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-pink-500/10 border border-pink-500/25 flex items-center justify-center shrink-0 shadow-[0_0_8px_rgba(236,72,153,0.15)]">
+              <span className="text-pink-400 font-bold text-xs block animate-pulse">👑</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="text-[7.5px] font-mono text-pink-400 font-black tracking-widest uppercase block leading-none">
+                {gameState.ccState === "waiting_for_verification" ? "🔥 ACTIVE COMMAND DIRECTIVE" : "🔍 EVALUATING OBEDIENCE"}
+              </span>
+              <p className="text-[10px] text-zinc-100 mt-1 leading-tight font-medium font-sans">
+                "{gameState.ccActiveSuggestion}"
+              </p>
+            </div>
+          </div>
+
+          <div className="shrink-0 flex items-center gap-2">
+            {gameState.ccState === "waiting_for_verification" ? (
+              currentUser.id === gameState.ccSubId ? (
+                <div className="flex items-center gap-1.5 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-pink-500" />
+                  <span className="text-[7.5px] font-mono font-bold text-white bg-pink-600 border border-pink-400 px-1.5 py-0.5 rounded leading-none">
+                    USE CAMERA BELOW 🎥
+                  </span>
+                </div>
+              ) : (
+                <span className="text-[7.5px] font-mono text-zinc-400 italic bg-white/5 border border-white/5 px-2 py-0.5 rounded">
+                  ⏱️ Sub complying...
+                </span>
+              )
+            ) : gameState.ccState === "waiting_for_approval" ? (
+              currentUser.id === gameState.ccMasterId ? (
+                <div className="flex items-center gap-1.5" id="chat-cc-fast-actions-header">
+                  <button
+                    type="button"
+                    onClick={onCommandReject}
+                    className="px-2 py-1 bg-rose-600/25 hover:bg-rose-600 border border-rose-500/35 text-rose-200 hover:text-white rounded-md text-[8px] font-mono font-black uppercase transition-all shadow-md cursor-pointer select-none"
+                    title="Reject and request retake"
+                  >
+                    REJECT ✗
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onCommandApprove}
+                    className="px-2 py-1 bg-gradient-to-r from-emerald-600 to-teal-500 text-white border border-emerald-400/40 rounded-md text-[8px] font-mono font-black uppercase transition-all shadow-md cursor-pointer select-none font-bold"
+                    title="Approve and award point"
+                  >
+                    APPROVE ✓
+                  </button>
+                </div>
+              ) : (
+                <span className="text-[7.5px] font-mono text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded animate-pulse">
+                  ● VERIFYING...
+                </span>
+              )
+            ) : null}
+          </div>
+        </div>
+      )}
+
       {/* Hidden Audio Element for Player */}
       <audio ref={audioPlayerRef} src={audioPlaybackUrl || undefined} className="hidden" />
 
       {/* Message Feed Display */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 selection:bg-indigo-500/20 scrollbar-none" id="chat-messages-scroller">
+        {/* COMMAND AND CONTROL GAME HUB (CHATROOM INTEGRATION) */}
+        {gameState?.selectedGameId === "command_control" && (
+          (() => {
+            const ccState = gameState.ccState || "";
+            const ccMasterId = gameState.ccMasterId || "";
+            const ccSubId = gameState.ccSubId || "";
+            const isMaster = currentUser.id === ccMasterId;
+            const isSub = currentUser.id === ccSubId;
+            const ccActiveSuggestion = gameState.ccActiveSuggestion || "";
+            const ccCommandAudioUrl = gameState.ccCommandAudioUrl || "";
+
+            if (ccState === "waiting_for_command") {
+              if (isMaster) {
+                return (
+                  <div className="bg-linear-to-br from-pink-950/45 to-purple-950/20 border border-pink-500/40 rounded-2xl p-4.5 text-center flex flex-col gap-3.5 shadow-[0_0_25px_rgba(236,72,153,0.15)] select-none animate-fade-in" id="chatroom-cc-master-console">
+                    <div className="flex items-center justify-center gap-1.5 border-b border-white/[0.04] pb-2 text-pink-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-ping" />
+                      <span className="text-[10px] font-mono tracking-widest font-black uppercase">👑 MASTER CHATROOM CONTROL</span>
+                    </div>
+                    <p className="text-[10.5px] text-zinc-300 leading-normal font-sans">
+                      Your Subject is listening! Send a voice order using the <strong className="text-white">microphone 🎙️ below</strong>, type custom text, or enforce a seed instantly:
+                    </p>
+                    
+                    {/* Instant templates dispatch area */}
+                    <div className="flex flex-col gap-1.5 text-left bg-black/40 p-2 border border-white/[0.03] rounded-xl max-h-[140px] overflow-y-auto scrollbar-thin">
+                      <span className="text-[7.5px] font-mono tracking-widest text-pink-400 uppercase font-bold block mb-1">🔥 Instant Hot Seeds:</span>
+                      {EROTIC_TASKS.slice(0, 4).map((task, idx) => (
+                        <div key={idx} className="flex items-center justify-between gap-2.5 p-2 bg-[#020202] hover:bg-zinc-900 border border-white/[0.02] rounded-lg text-[9.5px] leading-relaxed text-zinc-400 hover:text-white transition-colors">
+                          <span className="flex-1 text-[9px]">{task}</span>
+                          <button
+                            onClick={() => {
+                              updateRoomState?.({
+                                ccState: "waiting_for_verification",
+                                ccActiveSuggestion: task,
+                                ccCommandAudioUrl: "",
+                                ccVerificationVideoUrl: "",
+                                ccVerificationType: "",
+                                lastActionBy: currentUser.id
+                              });
+                              triggerAlert("Custom seed task broadcasted to Sub! 🌶️⚡", "success");
+                            }}
+                            className="bg-pink-650 hover:bg-pink-500 text-white font-mono text-[7.5px] font-bold px-2 py-1 rounded uppercase tracking-wider shrink-0 active:scale-95 transition-all cursor-pointer"
+                          >
+                            Enforce
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              } else {
+                return (
+                  <div className="bg-[#050508] border border-white/[0.03] rounded-2xl p-4 text-center shadow-lg animate-fade-in flex flex-col gap-3" id="chatroom-cc-sub-awaiting">
+                    <div className="relative w-10 h-10 mx-auto flex items-center justify-center">
+                      <span className="absolute inset-0 rounded-full border border-dashed border-violet-500/20 animate-[spin_8s_linear_infinite]" />
+                      <span className="absolute w-5 h-5 rounded-full bg-violet-500/5 animate-ping" />
+                      <span className="text-violet-400 font-bold font-mono text-[10px]">⌛</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-mono tracking-widest text-violet-400 uppercase font-black block animate-pulse">
+                        AWAITING INCOMING DIRECTIVE
+                      </span>
+                      <p className="text-[10px] text-zinc-400 mt-1 max-w-xs mx-auto text-center leading-normal">
+                        Keep your earplay on. Master is active inside the control console, preparing your physical obedience challenge. Stand by...
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
+            }
+
+            if (ccState === "waiting_for_verification") {
+              if (isMaster) {
+                return (
+                  <div className="bg-[#050508] border border-white/[0.03] rounded-2xl p-4 text-center shadow-lg animate-fade-in flex flex-col gap-3" id="chatroom-cc-master-waiting">
+                    <div className="relative w-10 h-10 mx-auto flex items-center justify-center">
+                      <span className="absolute inset-0 rounded-full border border-dashed border-pink-500/20 animate-[spin_8s_linear_infinite]" />
+                      <span className="absolute w-5 h-5 rounded-full bg-pink-500/5 animate-ping" />
+                      <span className="text-pink-400 font-bold font-mono text-[10px]">⏱️</span>
+                    </div>
+                    <div>
+                      <span className="text-[9.5px] font-mono tracking-widest text-zinc-500 uppercase font-black block leading-none">
+                        ⏱️ AWAITING RESPONSE
+                      </span>
+                      <p className="text-[10px] text-zinc-400 mt-2.5 max-w-xs mx-auto text-center leading-normal">
+                        Active Order: <em className="text-pink-300 font-mono font-medium">"{ccActiveSuggestion}"</em>
+                      </p>
+                      <p className="text-[9px] text-zinc-500 mt-1 pb-1">
+                        Sub received directive and is currently filming their 8s compliance video teaser inside their viewfinder shutter...
+                      </p>
+                    </div>
+                  </div>
+                );
+              } else {
+                return (
+                  <div className="bg-linear-to-br from-violet-950/40 via-[#07070a]/95 to-pink-950/20 border border-violet-500/45 rounded-2xl p-4.5 text-center flex flex-col justify-center items-center gap-3 animate-fade-in" id="chatroom-cc-sub-verify">
+                    <span className="text-[9.5px] font-mono font-black text-pink-400 tracking-wider flex items-center justify-center gap-1.5 uppercase leading-none animate-pulse">
+                      🔥 COMPLY MASTER INSTRUCTIONS 🔥
+                    </span>
+                    <div className="p-3 bg-black/50 border border-white/[0.02] rounded-xl font-sans mt-0.5 text-center max-w-xs w-full text-zinc-100">
+                      <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-widest block mb-1">Direct Command Text:</span>
+                      <p className="text-[10.5px] leading-relaxed font-mono text-pink-300">
+                        "{ccActiveSuggestion}"
+                      </p>
+                    </div>
+
+                    {ccCommandAudioUrl && (
+                      <div className="p-3 my-0.5 rounded-xl bg-violet-950/25 border border-violet-500/20 flex flex-col gap-2 text-center max-w-xs mx-auto w-full">
+                        <div className="flex items-center justify-center gap-1.5 text-violet-400 font-mono text-[9.5px] font-bold uppercase">
+                          <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-ping" />
+                          🔊 Play voice directive
+                        </div>
+                        <audio src={ccCommandAudioUrl} controls autoPlay className="w-full h-8 mt-1 focus:outline-none" />
+                      </div>
+                    )}
+
+                    <div className="w-full flex flex-col gap-2 mt-1">
+                      <button
+                        onClick={openInAppCamera}
+                        className="py-2.5 px-4 bg-gradient-to-r from-violet-600 via-purple-600 to-pink-600 text-white font-mono text-[9px] tracking-widest uppercase rounded-xl transition-all font-extrabold cursor-pointer hover:shadow-[0_0_15px_rgba(168,85,247,0.3)] shadow-md flex items-center justify-center gap-1.5 animate-pulse"
+                      >
+                        <Video className="w-4 h-4 text-white" /> 📹 RECORD COMPLIANCE (8S)
+                      </button>
+                      <p className="text-[8px] text-zinc-500 tracking-normal font-sans text-center">
+                        The shutter will automatically restrict capture to 8 seconds, sync to Drive, and transmit immediately for instant score audit!
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
+            }
+
+            if (ccState === "waiting_for_approval") {
+              if (isMaster) {
+                return (
+                  <div className="bg-linear-to-br from-emerald-950/40 via-zinc-950/90 to-teal-950/20 border border-emerald-500/40 rounded-2xl p-4.5 text-center flex flex-col gap-3 shadow-[0_0_30px_rgba(16,185,129,0.15)] animate-fade-in" id="chatroom-cc-master-approve">
+                    <span className="text-[10px] font-mono font-black text-emerald-400 tracking-wider flex items-center justify-center gap-1 uppercase leading-none">
+                      <Check className="w-3.5 h-3.5 text-emerald-400 animate-bounce" /> AUDIT COMPLIANCE VIDEO
+                    </span>
+
+                    <div className="w-full max-w-xs mx-auto p-1.5 rounded-xl border border-white/[0.04] bg-[#020202] shadow">
+                      <video src={gameState.ccVerificationVideoUrl} controls autoPlay loop playsInline className="w-full aspect-video rounded-lg object-cover" />
+                    </div>
+
+                    <p className="text-[9px] text-zinc-400 leading-normal px-2">
+                      Active: <em className="text-zinc-200">"{ccActiveSuggestion}"</em>. Check the proof details above carefully, and approve/reject the scorecard:
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-2 max-w-xs mx-auto w-full mt-1">
+                      <button
+                        type="button"
+                        onClick={onCommandReject}
+                        className="py-2.5 px-3 bg-zinc-950 border border-zinc-900 hover:border-red-500/40 hover:bg-red-950/20 text-rose-455 font-mono text-[9px] tracking-wider uppercase rounded-xl transition-all font-bold cursor-pointer"
+                      >
+                        REJECT Retake ❌
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onCommandApprove}
+                        className="py-2.5 px-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 text-white font-mono text-[9px] tracking-wider uppercase rounded-xl transition-all font-extrabold cursor-pointer shadow-lg shadow-emerald-500/15"
+                      >
+                        APPROVE +1 SCORE ✓
+                      </button>
+                    </div>
+                  </div>
+                );
+              } else {
+                return (
+                  <div className="bg-[#050508] border border-white/[0.03] rounded-2xl p-4 text-center shadow-lg animate-fade-in flex flex-col gap-3" id="chatroom-cc-sub-waiting">
+                    <div className="relative w-10 h-10 mx-auto flex items-center justify-center">
+                      <span className="absolute inset-0 rounded-full border border-dashed border-emerald-500/20 animate-[spin_8s_linear_infinite]" />
+                      <span className="absolute w-5 h-5 rounded-full bg-emerald-500/5 animate-ping" />
+                      <span className="text-emerald-400 font-bold font-mono text-[10px]">●</span>
+                    </div>
+                    <div>
+                      <span className="text-[9.5px] font-mono tracking-widest text-[#10b981] uppercase font-black block animate-pulse">
+                        ● UNDER REVIEW AUDITED BY MASTER ●
+                      </span>
+                      <p className="text-[10px] text-zinc-400 mt-2 max-w-xs mx-auto text-center leading-normal">
+                        Compliance teaser uploaded and dispatched safely! Master is currently watching your submissions live and scoring the checklist...
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
+            }
+
+            return null;
+          })()
+        )}
         {/* Dismissable Secure App Banner */}
         {showSecurityBanner && (
           <div className="relative bg-linear-to-r from-emerald-950/45 to-teal-950/10 border border-emerald-500/35 rounded-2xl p-3 pr-8 text-left flex items-start gap-3 shadow-[0_0_20px_rgba(16,185,129,0.05)] select-none animate-fade-in" id="secured-privacy-notification">
@@ -979,7 +1323,7 @@ export default function Chatroom({
               {msg.mediaType === "video" && msg.mediaUrl && (
                 <div 
                   className={`rounded-2xl overflow-hidden border shadow-lg bg-black/40 max-w-[200px] transition-all duration-500 ${
-                    isApprovalPending && msg.id === messages[messages.length - 1]?.id
+                    ((isApprovalPending && msg.id === messages[messages.length - 1]?.id) || (gameState?.selectedGameId === "command_control" && gameState?.ccState === "waiting_for_approval" && msg.mediaUrl === gameState?.ccVerificationVideoUrl))
                       ? "border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.5)]" 
                       : "border-white/10"
                   }`}
@@ -993,9 +1337,9 @@ export default function Chatroom({
                     style={{ filter: cameraFilters.find(f => f.id === msg.filterId)?.style || "none" }}
                   />
                   <div className="bg-black/50 py-1 px-2.5 text-[8px] font-mono text-zinc-400 flex flex-col gap-1 sm:flex-row sm:items-center justify-between">
-                    <span className="flex items-center gap-1">
-                      <Video className={`w-2.5 h-2.5 ${isApprovalPending && msg.id === messages[messages.length - 1]?.id ? "text-purple-400 animate-pulse" : "text-magenta-400"}`} /> 
-                      {isApprovalPending && msg.id === messages[messages.length - 1]?.id ? "SUBMITTED PROOF" : "VIDEO PROOF"}
+                    <span className="flex items-center gap-2">
+                      <Video className={`w-2.5 h-2.5 ${((isApprovalPending && msg.id === messages[messages.length - 1]?.id) || (gameState?.selectedGameId === "command_control" && gameState?.ccState === "waiting_for_approval" && msg.mediaUrl === gameState?.ccVerificationVideoUrl)) ? "text-purple-400 animate-pulse" : "text-magenta-400"}`} /> 
+                      {(gameState?.selectedGameId === "command_control" && msg.mediaUrl === gameState?.ccVerificationVideoUrl) ? "OBEDIENCE PROOF" : "VIDEO PROOF"}
                     </span>
                     <MessageTimer createdAt={msg.createdAt} isAdmin={currentUser?.email === "q8497464@gmail.com"} />
                     <div className="flex items-center gap-2">
@@ -1004,7 +1348,7 @@ export default function Chatroom({
                           href={msg.driveFileUrl} 
                           target="_blank" 
                           rel="noreferrer" 
-                          className="flex items-center gap-0.5 text-emerald-400 hover:text-emerald-300 transition-colors font-bold" 
+                          className="flex items-center gap-0.5 text-emerald-400 hover:text-emerald-300 transition-colors font-bold shrink-0" 
                           onClick={(e) => e.stopPropagation()}
                           title="Saved in Google Drive"
                         >
@@ -1014,6 +1358,61 @@ export default function Chatroom({
                       <span className="text-[7px] text-green-400 font-bold uppercase">MUTED</span>
                     </div>
                   </div>
+
+                  {/* DYNAMIC COMPLIANCE STATUS INDICATOR (IF ALREADY EVALUATED) */}
+                  {gameState?.selectedGameId === "command_control" && msg.ccStatus && (
+                    <div className={`p-1.5 border-t text-center ${
+                      msg.ccStatus === "approved" 
+                        ? "border-emerald-500/20 bg-emerald-950/30" 
+                        : "border-red-500/20 bg-[#270c12]/50"
+                    }`} onClick={(e) => e.stopPropagation()}>
+                      <span className={`text-[8.5px] font-mono uppercase tracking-wider block font-black ${
+                        msg.ccStatus === "approved" ? "text-emerald-400" : "text-rose-400"
+                      }`}>
+                        {msg.ccStatus === "approved" ? "✓ Approved (+1 Point)" : "✗ Rejected (Requires Retake)"}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* MASTER ASSESSMENT CHOICES ON ANY SUB VIDEO IN CHATROOM */}
+                  {gameState?.selectedGameId === "command_control" && 
+                   !msg.ccStatus && 
+                   msg.senderId === gameState?.ccSubId && 
+                   currentUser.id === gameState?.ccMasterId && (
+                    <div className="p-2 border-t border-pink-500/20 bg-zinc-950/95 flex flex-col gap-1.5 animate-pulse" onClick={(e) => e.stopPropagation()}>
+                      <span className="text-[7.5px] font-mono text-pink-400 font-extrabold tracking-widest uppercase block text-center">
+                        👑 MASTER AUDIT DECISION
+                      </span>
+                      <div className="grid grid-cols-2 gap-1.5 px-0.5 pb-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateMessageStatus(msg.id, "rejected")}
+                          className="py-1 px-2.5 bg-red-950/40 hover:bg-rose-700 hover:text-white border border-rose-500/30 text-rose-350 rounded-md text-[8.5px] font-mono tracking-wider uppercase transition-all font-extrabold cursor-pointer select-none"
+                        >
+                          REJECT retake ❌
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateMessageStatus(msg.id, "approved")}
+                          className="py-1 px-2.5 bg-gradient-to-r from-emerald-600 to-teal-500 hover:scale-[1.02] text-white rounded-md text-[8.5px] font-mono tracking-wider uppercase transition-all font-extrabold cursor-pointer select-none shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+                        >
+                          APPROVE ✓
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SUB COMPLIANCE STATUS INDICATOR */}
+                  {gameState?.selectedGameId === "command_control" && 
+                   !msg.ccStatus && 
+                   msg.senderId === gameState?.ccSubId && 
+                   currentUser.id === gameState?.ccSubId && (
+                    <div className="p-1.5 border-t border-purple-500/20 bg-purple-950/20 text-center animate-pulse">
+                      <span className="text-[7.5px] font-mono text-purple-300 uppercase tracking-widest block font-bold">
+                        ⏱️ Awaiting audit rating...
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 

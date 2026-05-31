@@ -19,6 +19,7 @@ export interface ChatMessage {
   driveSynced?: boolean;
   driveFileUrl?: string;
   filterId?: string;
+  ccStatus?: "approved" | "rejected";
 }
 
 export type CoinState = "idle" | "flipping" | "landed";

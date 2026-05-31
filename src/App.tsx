@@ -848,12 +848,97 @@ export default function App() {
     triggerAlert("Penalty completed. Turn passed without points with honor.", "info");
   };
 
+  // MASTER FAST COMMAND APPROVAL via Chatroom
+  const handleCommandAndControlApprove = async () => {
+    if (!gameState) return;
+    soundManager.play("success");
+
+    const isSubHostVal = gameState.ccSubId === gameState.hostId;
+    const isSubGuestVal = gameState.ccSubId === (gameState.guestId || "usr_guest");
+
+    const addedScoreHost = isSubHostVal ? (gameState.scoreHost + 1) : gameState.scoreHost;
+    const addedScoreGuest = isSubGuestVal ? (gameState.scoreGuest + 1) : gameState.scoreGuest;
+
+    const currentCcScoreHost = gameState.ccScoreHost || 0;
+    const currentCcScoreGuest = gameState.ccScoreGuest || 0;
+
+    await updateRoomState({
+      ccState: "waiting_for_command",
+      ccActiveSuggestion: "",
+      ccVerificationVideoUrl: "",
+      ccVerificationType: "",
+      scoreHost: addedScoreHost,
+      scoreGuest: addedScoreGuest,
+      ccScoreHost: isSubHostVal ? (currentCcScoreHost + 1) : currentCcScoreHost,
+      ccScoreGuest: isSubGuestVal ? (currentCcScoreGuest + 1) : currentCcScoreGuest,
+    });
+    triggerAlert("Task Approved! +1 Compliance point rewarded to sub scorecard.", "success");
+  };
+
+  const handleCommandAndControlReject = async () => {
+    if (!gameState) return;
+    soundManager.play("error");
+
+    await updateRoomState({
+      ccState: "waiting_for_verification",
+      ccVerificationVideoUrl: "",
+      ccVerificationType: ""
+    });
+    triggerAlert("Submission rejected! Ordered Sub to film a better compliance clip.", "error");
+  };
+
   // CALLBACK CALLED WHEN PARTNER OR YOU SENDS MESSAGE
   const handleChatMessageSent = (msg: ChatMessage) => {
     if (!gameState || !currentUser) return;
 
     // Trigger feedback ping
     soundManager.play("ping");
+
+    // --- CASE C: COMMAND & CONTROL WORKFLOW VIA CHATROOM ---
+    if (gameState.selectedGameId === "command_control") {
+      const isSubSender = msg.senderId === gameState.ccSubId;
+      const isMasterSender = msg.senderId === gameState.ccMasterId;
+
+      if (isSubSender && gameState.ccState === "waiting_for_verification") {
+        if (msg.mediaType === "video" && msg.mediaUrl) {
+          updateRoomState({
+            ccState: "waiting_for_approval",
+            ccVerificationVideoUrl: msg.mediaUrl,
+            ccVerificationDriveUrl: msg.driveFileUrl || "",
+            ccVerificationType: "video",
+            lastActionBy: msg.senderId
+          });
+          triggerAlert("Compliance video received in chatroom! Sent to Master for approval. 🎥👍", "success");
+          return;
+        }
+      }
+
+      if (isMasterSender && gameState.ccState === "waiting_for_command") {
+        if (msg.mediaType === "audio" && msg.mediaUrl) {
+          updateRoomState({
+            ccState: "waiting_for_verification",
+            ccActiveSuggestion: "Voice Directive 🎙️ (Play spoken command)",
+            ccCommandAudioUrl: msg.mediaUrl,
+            ccVerificationVideoUrl: "",
+            ccVerificationType: "",
+            lastActionBy: msg.senderId
+          });
+          triggerAlert("Voice command sent directly to Sub's console! 🎙️⚡", "success");
+          return;
+        } else if (msg.mediaType === "text" || (!msg.mediaUrl && msg.text)) {
+          updateRoomState({
+            ccState: "waiting_for_verification",
+            ccActiveSuggestion: msg.text,
+            ccCommandAudioUrl: "",
+            ccVerificationVideoUrl: "",
+            ccVerificationType: "",
+            lastActionBy: msg.senderId
+          });
+          triggerAlert("Custom command directive sent directly to Sub's console! 💬⚡", "success");
+          return;
+        }
+      }
+    }
 
     const isMyTurn = gameState.currentTurnPlayerId === currentUser.id;
     const isSenderActivePlayer = msg.senderId === gameState.currentTurnPlayerId;
@@ -1721,7 +1806,11 @@ export default function App() {
                 gameMode={gameMode} 
                 triggerAlert={triggerAlert} 
                 onMessageSent={handleChatMessageSent}
-                isApprovalPending={gameState.approvalState === "pending"}
+                isApprovalPending={gameState.approvalState === "pending" || (gameState.selectedGameId === "command_control" && gameState.ccState === "waiting_for_approval")}
+                gameState={gameState}
+                updateRoomState={updateRoomState}
+                onCommandApprove={handleCommandAndControlApprove}
+                onCommandReject={handleCommandAndControlReject}
               />
             </div>
           </div>
